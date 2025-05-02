@@ -53,7 +53,7 @@ class ExerciseOut(BaseModel):
 class WorkoutLog(BaseModel):
     userId: str
     date: str
-    exercises: List[Dict[str, any]]
+    exercises: List[Dict[str, Any]]
     duration: int
     goal: str
 
