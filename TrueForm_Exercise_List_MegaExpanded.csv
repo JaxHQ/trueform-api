@@ -1,0 +1,147 @@
+Exercise Name,Primary Muscle Group,Movement Type,Equipment Used,Archetype Tags,Other Tags
+Barbell Bench Press,Chest,Compound,Barbell,"Titan, Apex, Prime",Horizontal Push
+Dumbbell Chest Press,Chest,Compound,Dumbbells,"Titan, Nomad, Foundation",Horizontal Push
+Push-Up,Chest,Compound,Bodyweight,"Nomad, Igniter, Vanguard","Horizontal Push, Calisthenic"
+Barbell Overhead Press,Shoulders,Compound,Barbell,"Titan, Apex, Prime",Vertical Push
+Dumbbell Shoulder Press,Shoulders,Compound,Dumbbells,"Nomad, Foundation",Vertical Push
+Handstand Push-Up,Shoulders,Compound,Bodyweight,"Vanguard, Engine","Vertical Push, Calisthenic"
+Barbell Bent Over Row,Back,Compound,Barbell,"Titan, Prime",Horizontal Pull
+Dumbbell Row,Back,Compound,Dumbbells,"Nomad, Foundation",Horizontal Pull
+Inverted Row,Back,Compound,Bodyweight,"Igniter, Vanguard","Horizontal Pull, Calisthenic"
+Pull-Up,Back,Compound,Bodyweight,"Apex, Vanguard, Prime","Vertical Pull, Calisthenic"
+Lat Pulldown,Back,Compound,Cable Machine,"Foundation, Nomad",Vertical Pull
+Assisted Pull-Up,Back,Compound,Assisted Machine,"Foundation, Igniter","Vertical Pull, Calisthenic"
+Barbell Back Squat,Quads,Compound,Barbell,"Titan, Engine",Knee Dominant
+Goblet Squat,Quads,Compound,Dumbbell,"Foundation, Nomad",Knee Dominant
+Bodyweight Squat,Quads,Compound,Bodyweight,"Igniter, Vanguard","Knee Dominant, Calisthenic"
+Romanian Deadlift,Hamstrings,Compound,Barbell,"Titan, Prime",Hip Dominant
+Kettlebell Swing,Glutes,Explosive,Kettlebell,"Engine, Apex","Hip Dominant, Conditioning"
+Hip Thrust,Glutes,Compound,Barbell,"Apex, Foundation",Hip Dominant
+Plank,Core,Stability,Bodyweight,"Sentinel, Foundation","Anti-Extension, Core"
+Hanging Leg Raise,Core,Flexion,Bodyweight,"Apex, Igniter","Core, Calisthenic"
+Pallof Press,Core,Stability,Cable,"Sentinel, Vanguard","Anti-Rotation, Core"
+Box Jump,Legs,Explosive,Box,"Apex, Prime","Explosive, Plyometric"
+Power Clean,Full Body,Explosive,Barbell,"Titan, Prime","Explosive, Olympic"
+Broad Jump,Legs,Explosive,Bodyweight,"Nomad, Engine",Explosive
+World's Greatest Stretch,Full Body,Mobility,Bodyweight,"Sentinel, Foundation",Mobility
+Cat-Cow Stretch,Spine,Mobility,Bodyweight,Sentinel,"Mobility, Warm-up"
+90/90 Hip Stretch,Hips,Mobility,Bodyweight,Sentinel,"Mobility, Rehab"
+Rowing Machine,Full Body,Conditioning,Rower,"Engine, Igniter",Cardio
+Jump Rope,Full Body,Conditioning,Rope,"Nomad, Igniter",Cardio
+Treadmill Walk,Legs,Conditioning,Treadmill,"Foundation, Sentinel","Cardio, Recovery"
+Incline Dumbbell Press,Chest,Compound,Dumbbells,"Apex, Prime",Horizontal Push
+Cable Chest Fly,Chest,Isolation,Cable,"Apex, Foundation",Chest Isolation
+Machine Chest Press,Chest,Compound,Machine,"Foundation, Igniter",Horizontal Push
+Arnold Press,Shoulders,Compound,Dumbbells,"Prime, Nomad",Vertical Push
+Lateral Raise,Shoulders,Isolation,Dumbbells,"Apex, Igniter",Shoulder Isolation
+Machine Shoulder Press,Shoulders,Compound,Machine,Foundation,Vertical Push
+Seated Cable Row,Back,Compound,Cable,"Foundation, Nomad",Horizontal Pull
+Machine Row,Back,Compound,Machine,Foundation,Horizontal Pull
+Resistance Band Row,Back,Compound,Bands,"Sentinel, Nomad",Horizontal Pull
+Chin-Up,Back,Compound,Bodyweight,"Apex, Prime","Vertical Pull, Calisthenic"
+Neutral Grip Pull-Up,Back,Compound,Bodyweight,"Prime, Vanguard",Vertical Pull
+Straight Arm Pulldown,Back,Isolation,Cable,Apex,Back Isolation
+Front Squat,Quads,Compound,Barbell,"Titan, Prime",Knee Dominant
+Split Squat,Quads,Compound,Dumbbells,"Nomad, Foundation","Unilateral, Knee Dominant"
+Leg Press,Quads,Compound,Machine,"Foundation, Sentinel",Knee Dominant
+Walking Lunge,Legs,Compound,Dumbbells,"Igniter, Nomad","Unilateral, Knee Dominant"
+Conventional Deadlift,Hamstrings,Compound,Barbell,"Titan, Vanguard",Hip Dominant
+Trap Bar Deadlift,Glutes,Compound,Trap Bar,"Prime, Engine",Hip Dominant
+Cable Pull-Through,Glutes,Isolation,Cable,"Apex, Foundation",Hip Dominant
+Cable Woodchopper,Core,Rotational,Cable,"Igniter, Apex","Rotation, Core"
+Bird Dog,Core,Stability,Bodyweight,Sentinel,"Core, Stability"
+Russian Twist,Core,Rotational,Bodyweight,"Igniter, Engine","Core, Rotation"
+Side Plank,Core,Stability,Bodyweight,Sentinel,Anti-Lateral Flexion
+Med Ball Slam,Full Body,Explosive,Medicine Ball,"Vanguard, Engine","Explosive, Power"
+Lateral Bound,Legs,Explosive,Bodyweight,"Apex, Prime","Explosive, Plyometric"
+Push Press,Shoulders,Explosive,Barbell,"Titan, Prime","Explosive, Overhead"
+Foam Rolling Quads,Quads,Mobility,Foam Roller,"Sentinel, Foundation","Mobility, Recovery"
+Wall Angels,Shoulders,Mobility,Bodyweight,Sentinel,Mobility
+Thread the Needle,T-Spine,Mobility,Bodyweight,Sentinel,Mobility
+Hip Flexor Stretch,Hips,Mobility,Bodyweight,"Sentinel, Foundation","Mobility, Rehab"
+Air Bike Sprints,Full Body,Conditioning,Air Bike,"Engine, Igniter","Cardio, HIIT"
+Stair Climber,Legs,Conditioning,Machine,"Foundation, Nomad",Cardio
+Battle Ropes,Arms,Conditioning,Ropes,"Igniter, Engine","Cardio, HIIT"
+Treadmill Sprint Intervals,Legs,Conditioning,Treadmill,"Engine, Apex",HIIT
+Decline Push-Up,Chest,Compound,Bodyweight,"Igniter, Vanguard","Horizontal Push, Calisthenic"
+Resistance Band Chest Press,Chest,Compound,Bands,"Nomad, Foundation",Horizontal Push
+Single Arm Dumbbell Press,Shoulders,Compound,Dumbbells,"Prime, Nomad","Vertical Push, Unilateral"
+Pike Push-Up,Shoulders,Compound,Bodyweight,"Vanguard, Igniter","Vertical Push, Calisthenic"
+TRX Row,Back,Compound,Suspension Trainer,"Nomad, Igniter","Horizontal Pull, Calisthenic"
+Resistance Band Face Pull,Shoulders,Isolation,Bands,"Sentinel, Foundation",Shoulder Stability
+Assisted Chin-Up,Back,Compound,Assisted Machine,"Igniter, Foundation",Vertical Pull
+Resistance Band Pulldown,Back,Compound,Bands,Nomad,Vertical Pull
+Step-Up,Quads,Compound,Dumbbells,"Nomad, Prime","Unilateral, Knee Dominant"
+Belt Squat,Quads,Compound,Belt Machine,"Titan, Foundation",Knee Dominant
+Wall Sit,Quads,Isometric,Bodyweight,"Igniter, Sentinel","Knee Dominant, Isometric"
+Single Leg Romanian Deadlift,Hamstrings,Compound,Dumbbells,"Prime, Nomad","Unilateral, Hip Dominant"
+Barbell Good Morning,Hamstrings,Compound,Barbell,Titan,Hip Dominant
+Glute Bridge March,Glutes,Isolation,Bodyweight,Sentinel,Glute Activation
+Dead Bug,Core,Stability,Bodyweight,"Sentinel, Foundation",Anti-Extension
+Toe Touches,Core,Flexion,Bodyweight,"Igniter, Apex","Core, Calisthenic"
+Weighted Sit-Up,Core,Flexion,Plate,"Titan, Igniter","Core, Weighted"
+Stability Ball Rollout,Core,Stability,Stability Ball,Sentinel,"Anti-Extension, Stability"
+Jump Squat,Legs,Explosive,Bodyweight,"Igniter, Apex","Explosive, Plyometric"
+Bounding,Legs,Explosive,Bodyweight,"Apex, Engine","Explosive, Athletic"
+Split Jumps,Legs,Explosive,Bodyweight,"Igniter, Prime","Plyometric, Explosive"
+Ankle Dorsiflexion Drill,Ankles,Mobility,Bodyweight,Sentinel,"Mobility, Rehab"
+T-Spine Extension on Foam Roller,T-Spine,Mobility,Foam Roller,"Sentinel, Foundation",Mobility
+Scapular Wall Slide,Shoulders,Mobility,Bodyweight,Sentinel,"Mobility, Posture"
+Sled Push,Legs,Conditioning,Sled,"Engine, Vanguard","Conditioning, Strength-Endurance"
+Sandbag Carry,Full Body,Conditioning,Sandbag,"Vanguard, Engine","Conditioning, Grip"
+Farmer's Walk,Grip,Conditioning,Dumbbells,"Engine, Vanguard","Carry, Core Stability"
+Tire Flip,Full Body,Conditioning,Tire,"Titan, Engine","Conditioning, Explosive"
+Machine Chest Fly,Chest,Isolation,Machine,"Foundation, Apex",Chest Isolation
+Floor Press,Chest,Compound,Barbell,"Titan, Prime",Horizontal Push
+Resistance Band Push-Up,Chest,Compound,Bands,"Nomad, Igniter","Horizontal Push, Calisthenic"
+Z Press,Shoulders,Compound,Barbell,"Titan, Prime",Vertical Push
+Landmine Press,Shoulders,Compound,Landmine,"Nomad, Sentinel",Vertical Push
+Resistance Band Overhead Press,Shoulders,Compound,Bands,"Foundation, Sentinel",Vertical Push
+Chest Supported Row,Back,Compound,Dumbbells,"Prime, Foundation",Horizontal Pull
+Incline Bench DB Row,Back,Compound,Dumbbells,"Prime, Nomad",Horizontal Pull
+Machine Rear Delt Fly,Shoulders,Isolation,Machine,"Foundation, Apex",Rear Delt Isolation
+Weighted Pull-Up,Back,Compound,Bodyweight + Weight,"Titan, Apex",Vertical Pull
+Lat Prayer Pulldown,Back,Isolation,Cable,"Foundation, Apex","Vertical Pull, Isolation"
+TRX Pull-Up,Back,Compound,Suspension Trainer,"Nomad, Igniter","Vertical Pull, Calisthenic"
+Cyclist Squat,Quads,Compound,Barbell or Dumbbells,"Apex, Prime","Knee Dominant, Quad Bias"
+Heel Elevated Goblet Squat,Quads,Compound,Dumbbell,"Nomad, Sentinel","Knee Dominant, Quad Bias"
+Bodyweight Step-Up,Quads,Compound,Bodyweight,"Igniter, Nomad",Knee Dominant
+Single Leg Glute Bridge,Glutes,Isolation,Bodyweight,"Sentinel, Foundation",Glute Isolation
+Kettlebell Deadlift,Hamstrings,Compound,Kettlebell,"Nomad, Engine",Hip Dominant
+Cable Kickback,Glutes,Isolation,Cable,"Apex, Foundation","Hip Dominant, Glute Isolation"
+Ab Wheel Rollout,Core,Stability,Ab Wheel,"Sentinel, Titan",Anti-Extension
+Weighted Russian Twist,Core,Rotational,Plate,"Igniter, Apex","Core, Rotation"
+Leg Raise on Bench,Core,Flexion,Bodyweight,"Nomad, Foundation","Core, Flexion"
+Medicine Ball Chest Pass,Upper Body,Explosive,Medicine Ball,"Prime, Apex","Explosive, Power"
+Hurdle Hops,Legs,Explosive,Bodyweight,"Apex, Engine","Explosive, Plyometric"
+Depth Jump,Legs,Explosive,Box,"Prime, Apex","Explosive, Advanced"
+Band Shoulder Dislocate,Shoulders,Mobility,Band,Sentinel,"Mobility, Shoulder"
+Quadruped T-Spine Rotation,T-Spine,Mobility,Bodyweight,Sentinel,"Mobility, Rotation"
+Child's Pose,Spine,Mobility,Bodyweight,Foundation,"Mobility, Recovery"
+Hill Sprints,Legs,Conditioning,Outdoor,"Engine, Vanguard","Cardio, HIIT"
+Farmer’s Carry with Trap Bar,Grip,Conditioning,Trap Bar,"Vanguard, Titan","Carry, Conditioning"
+Sled Drag,Full Body,Conditioning,Sled,"Engine, Prime","Conditioning, Strength-Endurance"
+Jumping Jacks,Full Body,Conditioning,Bodyweight,"Igniter, Nomad","Cardio, Warm-Up"
+Close-Grip Bench Press,Triceps,Compound,Barbell,"Titan, Prime","Horizontal Push, Triceps Focus"
+Smith Machine Chest Press,Chest,Compound,Smith Machine,Foundation,Horizontal Push
+Military Press,Shoulders,Compound,Barbell,"Titan, Prime",Vertical Push
+Seated Dumbbell Press,Shoulders,Compound,Dumbbells,"Foundation, Nomad",Vertical Push
+Reverse Fly with Dumbbells,Rear Delts,Isolation,Dumbbells,"Apex, Foundation",Rear Delt Isolation
+Cable Row with Rope,Back,Compound,Cable,Foundation,Horizontal Pull
+Behind-the-Neck Pulldown,Back,Compound,Cable,"Apex, Titan",Vertical Pull
+Single Arm Lat Pulldown,Back,Isolation,Cable,"Nomad, Prime","Vertical Pull, Unilateral"
+Barbell Bulgarian Split Squat,Quads,Compound,Barbell,"Prime, Titan","Unilateral, Knee Dominant"
+Reverse Lunge,Legs,Compound,Dumbbells,"Nomad, Igniter",Knee Dominant
+Hip Extension Machine,Glutes,Isolation,Machine,"Foundation, Sentinel","Hip Dominant, Glute Focus"
+Cable Romanian Deadlift,Hamstrings,Compound,Cable,"Nomad, Apex",Hip Dominant
+Weighted Plank,Core,Stability,Bodyweight + Weight,"Titan, Sentinel",Anti-Extension
+Mountain Climbers,Core,Flexion,Bodyweight,"Igniter, Engine","Core, Cardio"
+Suitcase Carry,Core,Stability,Dumbbell,"Vanguard, Foundation",Anti-Lateral Flexion
+Power Snatch,Full Body,Explosive,Barbell,"Titan, Prime","Olympic, Explosive"
+Burpee Broad Jump,Full Body,Explosive,Bodyweight,"Engine, Igniter","Explosive, Plyometric"
+Standing Hamstring Stretch,Hamstrings,Mobility,Bodyweight,Foundation,"Mobility, Flexibility"
+Wall Hip Opener,Hips,Mobility,Bodyweight,Sentinel,"Mobility, Rehab"
+Wrist Circles,Wrists,Mobility,Bodyweight,Sentinel,"Mobility, Prehab"
+Elliptical Machine,Full Body,Conditioning,Elliptical,"Foundation, Nomad",Cardio
+Boxing Rounds,Arms,Conditioning,Boxing Gloves,"Igniter, Apex","Conditioning, Coordination"
+Jump Squat Tabata,Legs,Conditioning,Bodyweight,"Engine, Igniter","Cardio, Plyometric"
