@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import random
 import pandas as pd
 from datetime import datetime
@@ -113,4 +113,3 @@ def log_workout(log: WorkoutLog):
     for ex in log.exercises:
         print(f"  {ex['name']}: {ex['sets']} sets x {ex['reps']} reps")
     return {"message": "Workout logged successfully."}
-
