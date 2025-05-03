@@ -8,7 +8,7 @@ from datetime import datetime
 
 app = FastAPI()
 
-# CORS config
+# CORS setup
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,7 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load exercises
+# Load CSV
 CSV_PATH = "Updated_Exercise_List.csv"
 df = pd.read_csv(CSV_PATH)
 
@@ -37,6 +37,8 @@ print(f"✅ Loaded {len(EXERCISES)} exercises.")
 REST_TIME_DEFAULT = 60
 user_logs = {}
 
+# ---------- MODELS ----------
+
 class WorkoutRequest(BaseModel):
     daysPerWeek: int
     availableTime: int
@@ -47,7 +49,8 @@ class WorkoutRequest(BaseModel):
     userPrefs: Optional[List[str]] = []
     injuries: Optional[List[str]] = []
     focus: Optional[str] = "Full Body"
-    prepType: Optional[str] = "Skip"  # Warm-Up, Conditioning, Both, Skip
+    prepType: Optional[str] = "Skip"
+    goal: Optional[str] = None  # kept for future use
 
 class ExerciseOut(BaseModel):
     name: str
@@ -65,6 +68,8 @@ class WorkoutLog(BaseModel):
     exercises: List[Dict[str, Any]]
     duration: int
 
+# ---------- HELPERS ----------
+
 def check_for_static_weights(logs: dict):
     suggestions = {}
     for exercise_id, entries in logs.items():
@@ -75,6 +80,18 @@ def check_for_static_weights(logs: dict):
             suggestions[exercise_id] = "You've used the same weight 3 sessions in a row. Try increasing slightly."
     return suggestions
 
+def filter_exercises(archetype, equipment, prefs=[], movement=None, focus=None):
+    return [
+        ex for ex in EXERCISES
+        if archetype in ex["archetypes"]
+        and any(eq in equipment for eq in ex["equipment"])
+        and (not movement or ex["movementType"] == movement)
+        and (not focus or focus == "Full Body" or ex["bodyRegion"] == focus)
+        and not any(pref.lower() in ex["name"].lower() for pref in prefs)
+    ]
+
+# ---------- ENDPOINTS ----------
+
 @app.post("/generate-workout", response_model=List[ExerciseOut])
 def generate_workout(data: WorkoutRequest):
     if not data.archetype:
@@ -82,45 +99,32 @@ def generate_workout(data: WorkoutRequest):
 
     time_budget = data.availableTime
     suggestions = check_for_static_weights(user_logs)
-
-    # Helper to select exercises
-    def filter_exercises(movement_type=None, body_focus=None):
-        return [
-            ex for ex in EXERCISES
-            if data.archetype in ex["archetypes"]
-            and any(eq in data.equipmentAccess for eq in ex["equipment"])
-            and (not movement_type or ex["movementType"] == movement_type)
-            and (not body_focus or ex["bodyRegion"] == body_focus or data.focus == "Full Body")
-            and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
-        ]
-
     workout = []
 
-    # Warm-Up
-    if data.prepType in ["Warm-Up", "Both"]:
-        warmups = filter_exercises(movement_type="Warm-Up")
+    # Add warm-up if requested
+    if data.prepType in ["Warm-Up", "Both"] and time_budget >= 10:
+        warmups = filter_exercises(data.archetype, data.equipmentAccess, data.userPrefs, movement="Warm-Up")
         if warmups:
-            chosen = random.choice(warmups)
-            workout.append(chosen)
+            warmup = random.choice(warmups)
+            workout.append(warmup)
             time_budget -= 10
 
-    # Main (Upper, Lower, or Full Body)
-    main_exs = filter_exercises(body_focus=data.focus)
-    num_main = max(1, time_budget // 10)
-    selected_main = random.sample(main_exs, min(num_main, len(main_exs)))
+    # Main exercises
+    main_pool = filter_exercises(data.archetype, data.equipmentAccess, data.userPrefs, movement=None, focus=data.focus)
+    num_main_blocks = max(1, time_budget // 10)
+    selected_main = random.sample(main_pool, min(num_main_blocks, len(main_pool)))
     workout.extend(selected_main)
     time_budget -= 10 * len(selected_main)
 
-    # Conditioning
+    # Add conditioning at end if requested
     if data.prepType in ["Conditioning", "Both"] and time_budget >= 10:
-        conditioning = filter_exercises(movement_type="Conditioning")
+        conditioning = filter_exercises(data.archetype, data.equipmentAccess, data.userPrefs, movement="Conditioning")
         if conditioning:
-            chosen = random.choice(conditioning)
-            workout.append(chosen)
+            workout.append(random.choice(conditioning))
             time_budget -= 10
 
     # Format output
-    result = []
+    output = []
     for ex in workout:
         ex_id = ex["name"].lower().replace(" ", "-")
         alts = [
@@ -129,7 +133,7 @@ def generate_workout(data: WorkoutRequest):
             and alt["muscleGroup"] == ex["muscleGroup"]
             and alt["movementType"] == ex["movementType"]
         ]
-        result.append({
+        output.append({
             "name": ex["name"],
             "muscleGroup": ex["muscleGroup"],
             "movementType": ex["movementType"],
@@ -139,7 +143,7 @@ def generate_workout(data: WorkoutRequest):
             "alternatives": random.sample(alts, min(3, len(alts))),
             "suggestion": suggestions.get(ex_id)
         })
-    return result
+    return output
 
 @app.post("/log-workout")
 def log_workout(log: WorkoutLog):
