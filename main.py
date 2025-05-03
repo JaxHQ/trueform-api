@@ -6,10 +6,9 @@ import random
 import pandas as pd
 from datetime import datetime
 
-# ------------------------- Init App -------------------------
-
 app = FastAPI()
 
+# ------------------------- CORS -------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,9 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ------------------------- Constants & Load Data -------------------------
-
-REST_TIME_DEFAULT = 60
+# ------------------------- Data Load -------------------------
 CSV_PATH = "Cleaned_Master_Exercise_List.csv"
 df = pd.read_csv(CSV_PATH)
 
@@ -36,6 +33,10 @@ for _, row in df.iterrows():
 
 print(f"✅ Loaded {len(EXERCISES)} exercises.")
 
+# ------------------------- Constants -------------------------
+REST_TIME_DEFAULT = 60
+user_logs = {}
+
 # ------------------------- Models -------------------------
 
 class WorkoutRequest(BaseModel):
@@ -47,6 +48,7 @@ class WorkoutRequest(BaseModel):
     archetype: Optional[str] = None
     userPrefs: Optional[List[str]] = []
     injuries: Optional[List[str]] = []
+    goal: Optional[str] = None  # made optional
 
 class ExerciseOut(BaseModel):
     name: str
@@ -64,17 +66,7 @@ class WorkoutLog(BaseModel):
     exercises: List[Dict[str, Any]]
     duration: int
 
-# ------------------------- In-Memory Log -------------------------
-
-user_logs = {
-    "incline-db-press": [
-        {"date": "2025-04-20", "weights": [35, 35, 35]},
-        {"date": "2025-04-24", "weights": [35, 35, 35]},
-        {"date": "2025-04-28", "weights": [35, 35, 35]}
-    ]
-}
-
-# ------------------------- Utility -------------------------
+# ------------------------- Helpers -------------------------
 
 def check_for_static_weights(logs: dict):
     suggestions = {}
@@ -84,7 +76,7 @@ def check_for_static_weights(logs: dict):
         last_3_weights = [tuple(entry["weights"]) for entry in entries[-3:]]
         if all(w == last_3_weights[0] for w in last_3_weights):
             suggestions[exercise_id] = (
-                "You've used the same weight 3 sessions in a row. If it felt easy, consider increasing."
+                "You've used the same weight 3 sessions in a row. Try increasing slightly if it feels too easy."
             )
     return suggestions
 
@@ -93,12 +85,9 @@ def check_for_static_weights(logs: dict):
 @app.post("/generate-workout", response_model=List[ExerciseOut])
 def generate_workout(data: WorkoutRequest):
     if not data.archetype:
-        raise HTTPException(status_code=400, detail="Archetype is required for workout generation.")
+        raise HTTPException(status_code=400, detail="Archetype is required.")
 
-    print(f"🔍 Archetype: {data.archetype}")
-    print(f"👞 Equipment: {data.equipmentAccess}")
-    print(f"🧠 UserPrefs: {data.userPrefs}")
-
+    # Filter exercises
     matching_exercises = [
         ex for ex in EXERCISES
         if data.archetype in ex["archetypes"]
@@ -107,21 +96,18 @@ def generate_workout(data: WorkoutRequest):
     ]
 
     if not matching_exercises:
-        print("⚠️ No perfect matches found. Using fallback.")
-        matching_exercises = [ex for ex in EXERCISES if data.archetype in ex["archetypes"]]
+        raise HTTPException(status_code=404, detail="No exercises found for that archetype and equipment.")
 
-    if not matching_exercises:
-        print("❌ No archetype matches. Using full list.")
-        matching_exercises = EXERCISES
-
+    # Limit to appropriate workout length
     num_blocks = max(1, data.availableTime // 10)
     selected = random.sample(matching_exercises, min(num_blocks, len(matching_exercises)))
     suggestions = check_for_static_weights(user_logs)
 
+    # Format output
     output = []
     for ex in selected:
         ex_id = ex["name"].lower().replace(" ", "-")
-        alt_names = [
+        alts = [
             alt["name"] for alt in matching_exercises
             if alt["name"] != ex["name"]
             and alt["muscleGroup"] == ex["muscleGroup"]
@@ -134,11 +120,10 @@ def generate_workout(data: WorkoutRequest):
             "sets": 4,
             "reps": "8-12",
             "rest": REST_TIME_DEFAULT,
-            "alternatives": random.sample(alt_names, min(3, len(alt_names))),
+            "alternatives": random.sample(alts, min(3, len(alts))),
             "suggestion": suggestions.get(ex_id)
         })
 
-    print(f"✅ Returning {len(output)} exercises.")
     return output
 
 @app.post("/log-workout")
@@ -164,16 +149,16 @@ def reshuffle_exercise(data: dict):
         ex for ex in EXERCISES
         if ex["name"] != current_name
         and (not same_muscle or ex["muscleGroup"] == muscle_group)
-        and any(e in equipment for e in ex["equipment"])
+        and any(eq in equipment for eq in ex["equipment"])
         and not any(pref.lower() in ex["name"].lower() for pref in user_prefs)
         and (not archetype or archetype in ex["archetypes"])
     ]
 
     if not pool:
-        raise HTTPException(status_code=404, detail="No suitable alternative found.")
+        raise HTTPException(status_code=404, detail="No suitable alternatives found.")
 
     new_ex = random.choice(pool)
-    alt_names = [
+    alts = [
         alt["name"] for alt in pool
         if alt["name"] != new_ex["name"]
         and alt["muscleGroup"] == new_ex["muscleGroup"]
@@ -187,5 +172,6 @@ def reshuffle_exercise(data: dict):
         "sets": 4,
         "reps": "8-12",
         "rest": REST_TIME_DEFAULT,
-        "alternatives": random.sample(alt_names, min(3, len(alt_names)))
+        "alternatives": random.sample(alts, min(3, len(alts))),
+        "suggestion": None
     }
