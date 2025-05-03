@@ -6,9 +6,10 @@ import random
 import pandas as pd
 from datetime import datetime
 
+# ------------------------- Init App -------------------------
+
 app = FastAPI()
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,7 +17,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# File path to the updated master list
+# ------------------------- Constants & Load Data -------------------------
+
+REST_TIME_DEFAULT = 60
 CSV_PATH = "Cleaned_Master_Exercise_List.csv"
 df = pd.read_csv(CSV_PATH)
 
@@ -32,8 +35,6 @@ for _, row in df.iterrows():
     })
 
 print(f"✅ Loaded {len(EXERCISES)} exercises.")
-
-REST_TIME_DEFAULT = 60
 
 # ------------------------- Models -------------------------
 
@@ -94,6 +95,10 @@ def generate_workout(data: WorkoutRequest):
     if not data.archetype:
         raise HTTPException(status_code=400, detail="Archetype is required for workout generation.")
 
+    print(f"🔍 Archetype: {data.archetype}")
+    print(f"👞 Equipment: {data.equipmentAccess}")
+    print(f"🧠 UserPrefs: {data.userPrefs}")
+
     matching_exercises = [
         ex for ex in EXERCISES
         if data.archetype in ex["archetypes"]
@@ -102,18 +107,21 @@ def generate_workout(data: WorkoutRequest):
     ]
 
     if not matching_exercises:
-        raise HTTPException(status_code=404, detail="No matching exercises found.")
+        print("⚠️ No perfect matches found. Using fallback.")
+        matching_exercises = [ex for ex in EXERCISES if data.archetype in ex["archetypes"]]
 
-    # Calculate number of exercises based on time
+    if not matching_exercises:
+        print("❌ No archetype matches. Using full list.")
+        matching_exercises = EXERCISES
+
     num_blocks = max(1, data.availableTime // 10)
     selected = random.sample(matching_exercises, min(num_blocks, len(matching_exercises)))
-
     suggestions = check_for_static_weights(user_logs)
 
     output = []
     for ex in selected:
         ex_id = ex["name"].lower().replace(" ", "-")
-        alts = [
+        alt_names = [
             alt["name"] for alt in matching_exercises
             if alt["name"] != ex["name"]
             and alt["muscleGroup"] == ex["muscleGroup"]
@@ -126,10 +134,11 @@ def generate_workout(data: WorkoutRequest):
             "sets": 4,
             "reps": "8-12",
             "rest": REST_TIME_DEFAULT,
-            "alternatives": random.sample(alts, min(3, len(alts))),
+            "alternatives": random.sample(alt_names, min(3, len(alt_names))),
             "suggestion": suggestions.get(ex_id)
         })
 
+    print(f"✅ Returning {len(output)} exercises.")
     return output
 
 @app.post("/log-workout")
