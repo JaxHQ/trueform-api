@@ -56,8 +56,9 @@ class ExerciseOut(BaseModel):
     movementType: str
     sets: int
     reps: str
+    rest: Optional[int] = 60  # add rest field
     alternatives: List[str]
-    suggestion: Optional[str] = None
+    suggestion: Optional[str] = None  # add suggestion field
 
 class WorkoutLog(BaseModel):
     userId: str
