@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
@@ -23,6 +23,14 @@ GOAL_VOLUME_MAP = {
     "aesthetics": 15,
     "performance": 12,
     "longevity": 10
+}
+
+REST_TIME_MAP = {
+    "strength": 120,
+    "aesthetics": 60,
+    "performance": 75,
+    "longevity": 60,
+    "conditioning": 30
 }
 
 CSV_PATH = "TrueForm_Exercise_List_MegaExpanded.csv"
@@ -56,9 +64,9 @@ class ExerciseOut(BaseModel):
     movementType: str
     sets: int
     reps: str
-    rest: Optional[int] = 60  # add rest field
+    rest: Optional[int] = 60
     alternatives: List[str]
-    suggestion: Optional[str] = None  # add suggestion field
+    suggestion: Optional[str] = None
 
 class WorkoutLog(BaseModel):
     userId: str
@@ -118,6 +126,7 @@ def generate_workout(data: WorkoutRequest):
                 "movementType": ex["movementType"],
                 "sets": 4,
                 "reps": "6-10",
+                "rest": REST_TIME_MAP.get(data.goal.lower(), 60),
                 "alternatives": random.sample(alternatives, min(3, len(alternatives)))
             })
 
@@ -139,6 +148,53 @@ def log_workout(log: WorkoutLog):
     for ex in log.exercises:
         print(f"  {ex['name']}: {ex['sets']} sets x {ex['reps']} reps")
     return {"message": "Workout logged successfully."}
+
+@app.post("/reshuffle-exercise", response_model=ExerciseOut)
+def reshuffle_exercise(data: dict):
+    current_name = data.get("currentName")
+    muscle_group = data.get("muscleGroup")
+    equipment = data.get("equipmentAccess", [])
+    user_prefs = data.get("userPrefs", [])
+    archetype = data.get("archetype")
+    same_muscle = data.get("sameMuscle", True)
+
+    pool = []
+    for ex in EXERCISES:
+        if ex["name"] == current_name:
+            continue
+        if same_muscle and ex["muscleGroup"] != muscle_group:
+            continue
+        if not any(e in equipment for e in ex["equipment"]):
+            continue
+        if any(pref.lower() in ex["name"].lower() for pref in user_prefs):
+            continue
+        if archetype and archetype not in ex["archetypes"]:
+            continue
+        pool.append(ex)
+
+    if not pool:
+        raise HTTPException(status_code=404, detail="No suitable alternative found.")
+
+    new_ex = random.choice(pool)
+
+    alternatives = [alt["name"] for alt in EXERCISES
+        if alt["name"] != new_ex["name"]
+        and alt["muscleGroup"] == new_ex["muscleGroup"]
+        and alt["movementType"] == new_ex["movementType"]
+        and any(e in equipment for e in alt["equipment"])
+        and not any(pref.lower() in alt["name"].lower() for pref in user_prefs)
+        and (archetype is None or archetype in alt["archetypes"])
+    ]
+
+    return {
+        "name": new_ex["name"],
+        "muscleGroup": new_ex["muscleGroup"],
+        "movementType": new_ex["movementType"],
+        "sets": 4,
+        "reps": "6-10",
+        "rest": REST_TIME_MAP.get("aesthetics", 60),
+        "alternatives": random.sample(alternatives, min(3, len(alternatives)))
+    }
 
 def check_for_static_weights(logs: dict):
     suggestions = {}
