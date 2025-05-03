@@ -33,22 +33,22 @@ REST_TIME_MAP = {
     "conditioning": 30
 }
 
-CSV_PATH = "TrueForm_Exercise_List_MegaExpanded.csv"
+CSV_PATH = "Cleaned_Master_Exercise_List.csv"
 df = pd.read_csv(CSV_PATH)
 
 EXERCISES = []
 for _, row in df.iterrows():
     EXERCISES.append({
         "name": row["Exercise Name"],
-        "muscleGroup": row["Primary Muscle Group"],
+        "muscleGroup": row["Muscle Group"],
         "movementType": row["Movement Type"],
-        "equipment": [e.strip() for e in str(row["Equipment Used"]).split(",")],
-        "archetypes": [a.strip() for a in str(row["Archetype Tags"]).split(",")],
-        "otherTags": [t.strip() for t in str(row["Other Tags"]).split(",")]
+        "equipment": [e.strip() for e in str(row["Equipment"]).split(",") if e],
+        "archetypes": [a.strip() for a in str(row["Archetype Tags"]).split(",") if a],
+        "otherTags": [t.strip() for t in str(row["Other Tags"]).split(",") if t]
     })
-print(f"✅ Total exercises loaded: {len(EXERCISES)}")
-print(f"📊 Unique muscle groups: {set(ex['muscleGroup'] for ex in EXERCISES)}")
-print(f"📋 First 5 exercise names: {[ex['name'] for ex in EXERCISES[:5]]}")
+
+print(f"✅ Loaded {len(EXERCISES)} exercises")
+
 class WorkoutRequest(BaseModel):
     daysPerWeek: int
     availableTime: int
@@ -70,30 +70,22 @@ class ExerciseOut(BaseModel):
     alternatives: List[str]
     suggestion: Optional[str] = None
 
-class WorkoutLog(BaseModel):
-    userId: str
-    date: str
-    exercises: List[Dict[str, Any]]
-    duration: int
-    goal: str
-
-user_logs = {
-    "incline-db-press": [
-        {"date": "2025-04-20", "weights": [35, 35, 35, 35]},
-        {"date": "2025-04-24", "weights": [35, 35, 35, 35]},
-        {"date": "2025-04-28", "weights": [35, 35, 35, 35]}
-    ]
-}
-
 @app.post("/generate-workout", response_model=List[ExerciseOut])
 def generate_workout(data: WorkoutRequest):
     target_sets = GOAL_VOLUME_MAP.get(data.goal.lower(), 12)
+
+    # Step 1: Build muscle score logic with fallback
     muscle_scores = {}
 
-    for muscle in data.weeklyVolume:
-        days_rest = CURRENT_DAY - data.lastWorked.get(muscle, 10)
-        volume = data.weeklyVolume.get(muscle, 0)
-        muscle_scores[muscle] = max(0, target_sets - volume) if days_rest >= MIN_REST_DAYS else -1
+    if data.weeklyVolume:
+        for muscle in data.weeklyVolume:
+            days_rest = CURRENT_DAY - data.lastWorked.get(muscle, 10)
+            volume = data.weeklyVolume.get(muscle, 0)
+            muscle_scores[muscle] = max(0, target_sets - volume) if days_rest >= MIN_REST_DAYS else -1
+    else:
+        # Fallback: balanced split if no history
+        default_muscles = ['Chest', 'Back', 'Legs', 'Shoulders', 'Core']
+        muscle_scores = {m: 1 for m in default_muscles}
 
     prioritized_muscles = sorted(
         [m for m, s in muscle_scores.items() if s > 0],
@@ -108,8 +100,6 @@ def generate_workout(data: WorkoutRequest):
                 continue
             if not any(e in data.equipmentAccess for e in ex["equipment"]):
                 continue
-            if any(pref.lower() in ex["name"].lower() for pref in data.userPrefs):
-                continue
             if data.archetype and data.archetype not in ex.get("archetypes", []):
                 continue
 
@@ -118,7 +108,6 @@ def generate_workout(data: WorkoutRequest):
                 and alt["muscleGroup"] == ex["muscleGroup"]
                 and alt["movementType"] == ex["movementType"]
                 and any(e in data.equipmentAccess for e in alt["equipment"])
-                and not any(pref.lower() in alt["name"].lower() for pref in data.userPrefs)
                 and (data.archetype is None or data.archetype in alt["archetypes"])
             ]
 
@@ -133,84 +122,4 @@ def generate_workout(data: WorkoutRequest):
             })
 
     limit = min(len(selected), max(1, data.availableTime // 10))
-    suggestions = check_for_static_weights(user_logs)
-
-    for ex in selected:
-        ex_id = ex["name"].lower().replace(" ", "-")
-        if ex_id in suggestions:
-            ex["suggestion"] = suggestions[ex_id]
-
     return random.sample(selected, limit) if selected else []
-
-@app.post("/log-workout")
-def log_workout(log: WorkoutLog):
-    for ex in log.exercises:
-        ex_id = ex["name"].lower().replace(" ", "-")
-        if ex_id not in user_logs:
-            user_logs[ex_id] = []
-        entry = {"date": log.date, "weights": ex.get("weights", [])}
-        user_logs[ex_id].append(entry)
-
-    print(f"Workout log for user {log.userId} on {log.date} saved.")
-    return {"message": "Workout logged successfully."}
-
-@app.post("/reshuffle-exercise", response_model=ExerciseOut)
-def reshuffle_exercise(data: dict):
-    current_name = data.get("currentName")
-    muscle_group = data.get("muscleGroup")
-    equipment = data.get("equipmentAccess", [])
-    user_prefs = data.get("userPrefs", [])
-    archetype = data.get("archetype")
-    same_muscle = data.get("sameMuscle", True)
-
-    pool = [
-        ex for ex in EXERCISES
-        if ex["name"] != current_name
-        and (not same_muscle or ex["muscleGroup"] == muscle_group)
-        and any(e in equipment for e in ex["equipment"])
-    ]
-
-    def score_exercise(ex):
-        score = 0
-        if archetype and archetype in ex["archetypes"]:
-            score += 2
-        if not any(pref.lower() in ex["name"].lower() for pref in user_prefs):
-            score += 1
-        return score
-
-    pool.sort(key=score_exercise, reverse=True)
-
-    if not pool:
-        raise HTTPException(status_code=404, detail="No suitable alternative found.")
-
-    new_ex = pool[0]
-
-    alternatives = [alt["name"] for alt in pool
-        if alt["name"] != new_ex["name"]
-        and alt["muscleGroup"] == new_ex["muscleGroup"]
-        and alt["movementType"] == new_ex["movementType"]
-    ]
-
-    return {
-        "name": new_ex["name"],
-        "muscleGroup": new_ex["muscleGroup"],
-        "movementType": new_ex["movementType"],
-        "sets": 4,
-        "reps": "6-10",
-        "rest": REST_TIME_MAP.get("aesthetics", 60),
-        "alternatives": random.sample(alternatives, min(3, len(alternatives)))
-    }
-
-def check_for_static_weights(logs: dict):
-    suggestions = {}
-    for exercise_id, entries in logs.items():
-        if len(entries) < 3:
-            continue
-        last_3_weights = [tuple(entry["weights"]) for entry in entries[-3:]]
-        if all(w == last_3_weights[0] for w in last_3_weights):
-            suggestions[exercise_id] = (
-                "Noticed you've been using the same weight for the last 3 sessions. "
-                "If you’re feeling confident, consider slightly increasing the intensity — "
-                "even a small bump can make a difference."
-            )
-    return suggestions
