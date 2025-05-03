@@ -142,11 +142,14 @@ def generate_workout(data: WorkoutRequest):
 
 @app.post("/log-workout")
 def log_workout(log: WorkoutLog):
-    print(f"Workout log for user {log.userId} on {log.date}:")
-    print(f"- Goal: {log.goal}")
-    print(f"- Duration: {log.duration} min")
     for ex in log.exercises:
-        print(f"  {ex['name']}: {ex['sets']} sets x {ex['reps']} reps")
+        ex_id = ex["name"].lower().replace(" ", "-")
+        if ex_id not in user_logs:
+            user_logs[ex_id] = []
+        entry = {"date": log.date, "weights": ex.get("weights", [])}
+        user_logs[ex_id].append(entry)
+
+    print(f"Workout log for user {log.userId} on {log.date} saved.")
     return {"message": "Workout logged successfully."}
 
 @app.post("/reshuffle-exercise", response_model=ExerciseOut)
@@ -158,32 +161,32 @@ def reshuffle_exercise(data: dict):
     archetype = data.get("archetype")
     same_muscle = data.get("sameMuscle", True)
 
-    pool = []
-    for ex in EXERCISES:
-        if ex["name"] == current_name:
-            continue
-        if same_muscle and ex["muscleGroup"] != muscle_group:
-            continue
-        if not any(e in equipment for e in ex["equipment"]):
-            continue
-        if any(pref.lower() in ex["name"].lower() for pref in user_prefs):
-            continue
-        if archetype and archetype not in ex["archetypes"]:
-            continue
-        pool.append(ex)
+    pool = [
+        ex for ex in EXERCISES
+        if ex["name"] != current_name
+        and (not same_muscle or ex["muscleGroup"] == muscle_group)
+        and any(e in equipment for e in ex["equipment"])
+    ]
+
+    def score_exercise(ex):
+        score = 0
+        if archetype and archetype in ex["archetypes"]:
+            score += 2
+        if not any(pref.lower() in ex["name"].lower() for pref in user_prefs):
+            score += 1
+        return score
+
+    pool.sort(key=score_exercise, reverse=True)
 
     if not pool:
         raise HTTPException(status_code=404, detail="No suitable alternative found.")
 
-    new_ex = random.choice(pool)
+    new_ex = pool[0]
 
-    alternatives = [alt["name"] for alt in EXERCISES
+    alternatives = [alt["name"] for alt in pool
         if alt["name"] != new_ex["name"]
         and alt["muscleGroup"] == new_ex["muscleGroup"]
         and alt["movementType"] == new_ex["movementType"]
-        and any(e in equipment for e in alt["equipment"])
-        and not any(pref.lower() in alt["name"].lower() for pref in user_prefs)
-        and (archetype is None or archetype in alt["archetypes"])
     ]
 
     return {
