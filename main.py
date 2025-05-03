@@ -46,7 +46,9 @@ for _, row in df.iterrows():
         "archetypes": [a.strip() for a in str(row["Archetype Tags"]).split(",")],
         "otherTags": [t.strip() for t in str(row["Other Tags"]).split(",")]
     })
-
+print(f"✅ Total exercises loaded: {len(EXERCISES)}")
+print(f"📊 Unique muscle groups: {set(ex['muscleGroup'] for ex in EXERCISES)}")
+print(f"📋 First 5 exercise names: {[ex['name'] for ex in EXERCISES[:5]]}")
 class WorkoutRequest(BaseModel):
     daysPerWeek: int
     availableTime: int
