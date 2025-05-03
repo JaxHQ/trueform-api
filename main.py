@@ -48,7 +48,8 @@ class WorkoutRequest(BaseModel):
     userPrefs: Optional[List[str]] = []
     injuries: Optional[List[str]] = []
     goal: Optional[str] = None
-    prepType: Optional[str] = "Skip"  # "Warm-Up", "Conditioning", "Both", "Skip"
+    focus: Optional[str] = None
+    prepType: Optional[str] = None
 
 class ExerciseOut(BaseModel):
     name: str
@@ -85,69 +86,54 @@ def generate_workout(data: WorkoutRequest):
     if not data.archetype:
         raise HTTPException(status_code=400, detail="Archetype is required.")
 
-    prep_blocks = 0
-    if data.prepType == "Warm-Up" or data.prepType == "Conditioning":
-        prep_blocks = 1
-    elif data.prepType == "Both":
-        prep_blocks = 2
+    focus_map = {
+        "Upper Body": ["Chest", "Back", "Shoulders", "Arms"],
+        "Lower Body": ["Legs", "Glutes", "Calves"],
+        "Full Body": ["Chest", "Back", "Legs", "Glutes", "Shoulders", "Arms", "Core"],
+    }
 
-    total_blocks = max(1, data.availableTime // 10)
-    main_blocks = max(1, total_blocks - prep_blocks)
+    matching_exercises = [
+        ex for ex in EXERCISES
+        if data.archetype in ex["archetypes"]
+        and any(eq in data.equipmentAccess for eq in ex["equipment"])
+        and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
+    ]
 
+    if data.focus and data.focus != "Let the app decide":
+        valid_muscles = focus_map.get(data.focus, [])
+        matching_exercises = [
+            ex for ex in matching_exercises
+            if ex["muscleGroup"] in valid_muscles or ex["movementType"] in ["Warmup", "Conditioning"]
+        ]
+
+    if not matching_exercises:
+        raise HTTPException(status_code=404, detail="No exercises found for that archetype, focus, and equipment.")
+
+    num_blocks = max(1, data.availableTime // 10)
+    selected = random.sample(matching_exercises, min(num_blocks, len(matching_exercises)))
     suggestions = check_for_static_weights(user_logs)
 
-    # Filter functions
-    def matches(ex, tag):
-        return (
-            tag in ex["archetypes"]
-            and any(eq in data.equipmentAccess for eq in ex["equipment"])
-            and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
-        )
+    output = []
+    for ex in selected:
+        ex_id = ex["name"].lower().replace(" ", "-")
+        alts = [
+            alt["name"] for alt in matching_exercises
+            if alt["name"] != ex["name"]
+            and alt["muscleGroup"] == ex["muscleGroup"]
+            and alt["movementType"] == ex["movementType"]
+        ]
+        output.append({
+            "name": ex["name"],
+            "muscleGroup": ex["muscleGroup"],
+            "movementType": ex["movementType"],
+            "sets": 4,
+            "reps": "8-12",
+            "rest": REST_TIME_DEFAULT,
+            "alternatives": random.sample(alts, min(3, len(alts))),
+            "suggestion": suggestions.get(ex_id)
+        })
 
-    main_pool = [ex for ex in EXERCISES if matches(ex, data.archetype)]
-    warmup_pool = [ex for ex in EXERCISES if "Warm-Up" in ex["otherTags"] and matches(ex, data.archetype)]
-    conditioning_pool = [ex for ex in EXERCISES if "Conditioning" in ex["otherTags"] and matches(ex, data.archetype)]
-
-    if not main_pool:
-        raise HTTPException(status_code=404, detail="No exercises found for archetype and equipment.")
-
-    workout = []
-
-    # Optional warm-up first
-    if data.prepType in ["Warm-Up", "Both"] and warmup_pool:
-        warm = random.choice(warmup_pool)
-        workout.append(format_exercise(warm, main_pool, suggestions))
-
-    # Main workout
-    for ex in random.sample(main_pool, min(main_blocks, len(main_pool))):
-        workout.append(format_exercise(ex, main_pool, suggestions))
-
-    # Optional conditioning last
-    if data.prepType in ["Conditioning", "Both"] and conditioning_pool:
-        cond = random.choice(conditioning_pool)
-        workout.append(format_exercise(cond, conditioning_pool, suggestions))
-
-    return workout
-
-
-def format_exercise(ex, pool, suggestions):
-    ex_id = ex["name"].lower().replace(" ", "-")
-    alts = [
-        alt["name"] for alt in pool
-        if alt["name"] != ex["name"]
-        and alt["muscleGroup"] == ex["muscleGroup"]
-        and alt["movementType"] == ex["movementType"]
-    ]
-    return {
-        "name": ex["name"],
-        "muscleGroup": ex["muscleGroup"],
-        "movementType": ex["movementType"],
-        "sets": 4,
-        "reps": "8-12",
-        "rest": REST_TIME_DEFAULT,
-        "alternatives": random.sample(alts, min(3, len(alts))),
-        "suggestion": suggestions.get(ex_id)
-    }
+    return output
 
 @app.post("/log-workout")
 def log_workout(log: WorkoutLog):
@@ -180,4 +166,21 @@ def reshuffle_exercise(data: dict):
     if not pool:
         raise HTTPException(status_code=404, detail="No suitable alternatives found.")
 
-    return format_exercise(random.choice(pool), pool, {})
+    new_ex = random.choice(pool)
+    alts = [
+        alt["name"] for alt in pool
+        if alt["name"] != new_ex["name"]
+        and alt["muscleGroup"] == new_ex["muscleGroup"]
+        and alt["movementType"] == new_ex["movementType"]
+    ]
+
+    return {
+        "name": new_ex["name"],
+        "muscleGroup": new_ex["muscleGroup"],
+        "movementType": new_ex["movementType"],
+        "sets": 4,
+        "reps": "8-12",
+        "rest": REST_TIME_DEFAULT,
+        "alternatives": random.sample(alts, min(3, len(alts))),
+        "suggestion": None
+    }
