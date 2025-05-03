@@ -8,7 +8,7 @@ from datetime import datetime
 
 app = FastAPI()
 
-# ------------------------- CORS -------------------------
+# CORS config
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,8 +16,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ------------------------- Data Load -------------------------
-CSV_PATH = "Cleaned_Master_Exercise_List.csv"
+# Load exercises
+CSV_PATH = "Updated_Exercise_List.csv"
 df = pd.read_csv(CSV_PATH)
 
 EXERCISES = []
@@ -28,16 +28,15 @@ for _, row in df.iterrows():
         "movementType": row["Movement Type"],
         "equipment": [e.strip() for e in str(row["Equipment Used"]).split(",")],
         "archetypes": [a.strip() for a in str(row["Archetype Tags"]).split(",")],
-        "otherTags": [t.strip() for t in str(row["Other Tags"]).split(",")]
+        "otherTags": [t.strip() for t in str(row["Other Tags"]).split(",")],
+        "bodyRegion": row["Body Region"]
     })
 
 print(f"✅ Loaded {len(EXERCISES)} exercises.")
 
-# ------------------------- Constants -------------------------
 REST_TIME_DEFAULT = 60
 user_logs = {}
 
-# ------------------------- Models -------------------------
 class WorkoutRequest(BaseModel):
     daysPerWeek: int
     availableTime: int
@@ -47,9 +46,8 @@ class WorkoutRequest(BaseModel):
     archetype: Optional[str] = None
     userPrefs: Optional[List[str]] = []
     injuries: Optional[List[str]] = []
-    goal: Optional[str] = None
-    focus: Optional[str] = None
-    prepType: Optional[str] = None
+    focus: Optional[str] = "Full Body"
+    prepType: Optional[str] = "Skip"  # Warm-Up, Conditioning, Both, Skip
 
 class ExerciseOut(BaseModel):
     name: str
@@ -67,7 +65,6 @@ class WorkoutLog(BaseModel):
     exercises: List[Dict[str, Any]]
     duration: int
 
-# ------------------------- Helpers -------------------------
 def check_for_static_weights(logs: dict):
     suggestions = {}
     for exercise_id, entries in logs.items():
@@ -75,54 +72,64 @@ def check_for_static_weights(logs: dict):
             continue
         last_3_weights = [tuple(entry["weights"]) for entry in entries[-3:]]
         if all(w == last_3_weights[0] for w in last_3_weights):
-            suggestions[exercise_id] = (
-                "You've used the same weight 3 sessions in a row. Try increasing slightly if it feels too easy."
-            )
+            suggestions[exercise_id] = "You've used the same weight 3 sessions in a row. Try increasing slightly."
     return suggestions
 
-# ------------------------- Endpoints -------------------------
 @app.post("/generate-workout", response_model=List[ExerciseOut])
 def generate_workout(data: WorkoutRequest):
     if not data.archetype:
         raise HTTPException(status_code=400, detail="Archetype is required.")
 
-    focus_map = {
-        "Upper Body": ["Chest", "Back", "Shoulders", "Arms"],
-        "Lower Body": ["Legs", "Glutes", "Calves"],
-        "Full Body": ["Chest", "Back", "Legs", "Glutes", "Shoulders", "Arms", "Core"],
-    }
-
-    matching_exercises = [
-        ex for ex in EXERCISES
-        if data.archetype in ex["archetypes"]
-        and any(eq in data.equipmentAccess for eq in ex["equipment"])
-        and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
-    ]
-
-    if data.focus and data.focus != "Let the app decide":
-        valid_muscles = focus_map.get(data.focus, [])
-        matching_exercises = [
-            ex for ex in matching_exercises
-            if ex["muscleGroup"] in valid_muscles or ex["movementType"] in ["Warmup", "Conditioning"]
-        ]
-
-    if not matching_exercises:
-        raise HTTPException(status_code=404, detail="No exercises found for that archetype, focus, and equipment.")
-
-    num_blocks = max(1, data.availableTime // 10)
-    selected = random.sample(matching_exercises, min(num_blocks, len(matching_exercises)))
+    time_budget = data.availableTime
     suggestions = check_for_static_weights(user_logs)
 
-    output = []
-    for ex in selected:
+    # Helper to select exercises
+    def filter_exercises(movement_type=None, body_focus=None):
+        return [
+            ex for ex in EXERCISES
+            if data.archetype in ex["archetypes"]
+            and any(eq in data.equipmentAccess for eq in ex["equipment"])
+            and (not movement_type or ex["movementType"] == movement_type)
+            and (not body_focus or ex["bodyRegion"] == body_focus or data.focus == "Full Body")
+            and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
+        ]
+
+    workout = []
+
+    # Warm-Up
+    if data.prepType in ["Warm-Up", "Both"]:
+        warmups = filter_exercises(movement_type="Warm-Up")
+        if warmups:
+            chosen = random.choice(warmups)
+            workout.append(chosen)
+            time_budget -= 10
+
+    # Main (Upper, Lower, or Full Body)
+    main_exs = filter_exercises(body_focus=data.focus)
+    num_main = max(1, time_budget // 10)
+    selected_main = random.sample(main_exs, min(num_main, len(main_exs)))
+    workout.extend(selected_main)
+    time_budget -= 10 * len(selected_main)
+
+    # Conditioning
+    if data.prepType in ["Conditioning", "Both"] and time_budget >= 10:
+        conditioning = filter_exercises(movement_type="Conditioning")
+        if conditioning:
+            chosen = random.choice(conditioning)
+            workout.append(chosen)
+            time_budget -= 10
+
+    # Format output
+    result = []
+    for ex in workout:
         ex_id = ex["name"].lower().replace(" ", "-")
         alts = [
-            alt["name"] for alt in matching_exercises
+            alt["name"] for alt in EXERCISES
             if alt["name"] != ex["name"]
             and alt["muscleGroup"] == ex["muscleGroup"]
             and alt["movementType"] == ex["movementType"]
         ]
-        output.append({
+        result.append({
             "name": ex["name"],
             "muscleGroup": ex["muscleGroup"],
             "movementType": ex["movementType"],
@@ -132,8 +139,7 @@ def generate_workout(data: WorkoutRequest):
             "alternatives": random.sample(alts, min(3, len(alts))),
             "suggestion": suggestions.get(ex_id)
         })
-
-    return output
+    return result
 
 @app.post("/log-workout")
 def log_workout(log: WorkoutLog):
@@ -158,7 +164,7 @@ def reshuffle_exercise(data: dict):
         ex for ex in EXERCISES
         if ex["name"] != current_name
         and (not same_muscle or ex["muscleGroup"] == muscle_group)
-        and any(eq in equipment for eq in ex["equipment"])
+        and any(e in equipment for e in ex["equipment"])
         and not any(pref.lower() in ex["name"].lower() for pref in user_prefs)
         and (not archetype or archetype in ex["archetypes"])
     ]
