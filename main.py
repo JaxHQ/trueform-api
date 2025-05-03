@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any
 import random
 import pandas as pd
@@ -8,7 +8,7 @@ from datetime import datetime
 
 app = FastAPI()
 
-# CORS setup
+# --- CORS Setup ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,7 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load CSV
+# --- Load Exercises ---
 CSV_PATH = "Updated_Exercise_List.csv"
 df = pd.read_csv(CSV_PATH)
 
@@ -33,24 +33,22 @@ for _, row in df.iterrows():
     })
 
 print(f"✅ Loaded {len(EXERCISES)} exercises.")
-
 REST_TIME_DEFAULT = 60
 user_logs = {}
 
-# ---------- MODELS ----------
-
+# --- Models ---
 class WorkoutRequest(BaseModel):
     daysPerWeek: int
     availableTime: int
     lastWorked: Dict[str, int]
     weeklyVolume: Dict[str, int]
     equipmentAccess: List[str]
-    archetype: Optional[str] = None
-    userPrefs: Optional[List[str]] = []
-    injuries: Optional[List[str]] = []
-    focus: Optional[str] = "Full Body"
-    prepType: Optional[str] = "Skip"
-    goal: Optional[str] = None  # kept for future use
+    archetype: Optional[str] = Field(default=None)
+    userPrefs: Optional[List[str]] = Field(default_factory=list)
+    injuries: Optional[List[str]] = Field(default_factory=list)
+    focus: Optional[str] = Field(default="Full Body")
+    prepType: Optional[str] = Field(default="Skip")
+    goal: Optional[str] = Field(default=None)  # ✅ This line is now safe
 
 class ExerciseOut(BaseModel):
     name: str
@@ -68,8 +66,7 @@ class WorkoutLog(BaseModel):
     exercises: List[Dict[str, Any]]
     duration: int
 
-# ---------- HELPERS ----------
-
+# --- Helpers ---
 def check_for_static_weights(logs: dict):
     suggestions = {}
     for exercise_id, entries in logs.items():
@@ -90,8 +87,7 @@ def filter_exercises(archetype, equipment, prefs=[], movement=None, focus=None):
         and not any(pref.lower() in ex["name"].lower() for pref in prefs)
     ]
 
-# ---------- ENDPOINTS ----------
-
+# --- Endpoints ---
 @app.post("/generate-workout", response_model=List[ExerciseOut])
 def generate_workout(data: WorkoutRequest):
     if not data.archetype:
@@ -101,7 +97,7 @@ def generate_workout(data: WorkoutRequest):
     suggestions = check_for_static_weights(user_logs)
     workout = []
 
-    # Add warm-up if requested
+    # Warm-Up
     if data.prepType in ["Warm-Up", "Both"] and time_budget >= 10:
         warmups = filter_exercises(data.archetype, data.equipmentAccess, data.userPrefs, movement="Warm-Up")
         if warmups:
@@ -109,21 +105,21 @@ def generate_workout(data: WorkoutRequest):
             workout.append(warmup)
             time_budget -= 10
 
-    # Main exercises
+    # Main Exercises
     main_pool = filter_exercises(data.archetype, data.equipmentAccess, data.userPrefs, movement=None, focus=data.focus)
     num_main_blocks = max(1, time_budget // 10)
     selected_main = random.sample(main_pool, min(num_main_blocks, len(main_pool)))
     workout.extend(selected_main)
     time_budget -= 10 * len(selected_main)
 
-    # Add conditioning at end if requested
+    # Conditioning
     if data.prepType in ["Conditioning", "Both"] and time_budget >= 10:
         conditioning = filter_exercises(data.archetype, data.equipmentAccess, data.userPrefs, movement="Conditioning")
         if conditioning:
             workout.append(random.choice(conditioning))
             time_budget -= 10
 
-    # Format output
+    # Format Response
     output = []
     for ex in workout:
         ex_id = ex["name"].lower().replace(" ", "-")
