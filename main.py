@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 import random
@@ -6,6 +7,13 @@ import pandas as pd
 from datetime import datetime
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 MIN_REST_DAYS = 1
 CURRENT_DAY = 7
@@ -49,6 +57,7 @@ class ExerciseOut(BaseModel):
     sets: int
     reps: str
     alternatives: List[str]
+    suggestion: Optional[str] = None
 
 class WorkoutLog(BaseModel):
     userId: str
@@ -57,10 +66,19 @@ class WorkoutLog(BaseModel):
     duration: int
     goal: str
 
+user_logs = {
+    "incline-db-press": [
+        {"date": "2025-04-20", "weights": [35, 35, 35, 35]},
+        {"date": "2025-04-24", "weights": [35, 35, 35, 35]},
+        {"date": "2025-04-28", "weights": [35, 35, 35, 35]}
+    ]
+}
+
 @app.post("/generate-workout", response_model=List[ExerciseOut])
 def generate_workout(data: WorkoutRequest):
     target_sets = GOAL_VOLUME_MAP.get(data.goal.lower(), 12)
     muscle_scores = {}
+
     for muscle in data.weeklyVolume:
         days_rest = CURRENT_DAY - data.lastWorked.get(muscle, 10)
         volume = data.weeklyVolume.get(muscle, 0)
@@ -103,6 +121,13 @@ def generate_workout(data: WorkoutRequest):
             })
 
     limit = min(len(selected), max(1, data.availableTime // 10))
+    suggestions = check_for_static_weights(user_logs)
+
+    for ex in selected:
+        ex_id = ex["name"].lower().replace(" ", "-")
+        if ex_id in suggestions:
+            ex["suggestion"] = suggestions[ex_id]
+
     return random.sample(selected, limit) if selected else []
 
 @app.post("/log-workout")
@@ -113,3 +138,17 @@ def log_workout(log: WorkoutLog):
     for ex in log.exercises:
         print(f"  {ex['name']}: {ex['sets']} sets x {ex['reps']} reps")
     return {"message": "Workout logged successfully."}
+
+def check_for_static_weights(logs: dict):
+    suggestions = {}
+    for exercise_id, entries in logs.items():
+        if len(entries) < 3:
+            continue
+        last_3_weights = [tuple(entry["weights"]) for entry in entries[-3:]]
+        if all(w == last_3_weights[0] for w in last_3_weights):
+            suggestions[exercise_id] = (
+                "Noticed you've been using the same weight for the last 3 sessions. "
+                "If you’re feeling confident, consider slightly increasing the intensity — "
+                "even a small bump can make a difference."
+            )
+    return suggestions
