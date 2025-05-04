@@ -97,29 +97,55 @@ def generate_workout(data: WorkoutRequest):
     suggestions = check_for_static_weights(user_logs)
     workout = []
 
-    # Warm-Up
+    def try_filter(movement=None, relax_focus=False):
+        pool = [
+            ex for ex in EXERCISES
+            if data.archetype in ex["archetypes"]
+            and any(eq in data.equipmentAccess for eq in ex["equipment"])
+            and (not movement or ex["movementType"] == movement)
+            and (relax_focus or data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
+            and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
+        ]
+        print(f"🎯 Filtered {len(pool)} exercises (movement={movement}, focus={data.focus}, relaxed={relax_focus})")
+        return pool
+
+    # 1. Warm-up block
     if data.prepType in ["Warm-Up", "Both"] and time_budget >= 10:
-        warmups = filter_exercises(data.archetype, data.equipmentAccess, data.userPrefs, movement="Warm-Up")
+        warmups = try_filter(movement="Warm-Up")
         if warmups:
             warmup = random.choice(warmups)
             workout.append(warmup)
             time_budget -= 10
 
-    # Main Exercises
-    main_pool = filter_exercises(data.archetype, data.equipmentAccess, data.userPrefs, movement=None, focus=data.focus)
+    # 2. Main exercise blocks
     num_main_blocks = max(1, time_budget // 10)
+    main_pool = try_filter()
+
+    if len(main_pool) < num_main_blocks:
+        print("⚠️ Not enough with strict filters — relaxing focus")
+        main_pool = try_filter(relax_focus=True)
+
+    if len(main_pool) < num_main_blocks:
+        print("⚠️ Still not enough — removing movement filter")
+        main_pool = [
+            ex for ex in EXERCISES
+            if data.archetype in ex["archetypes"]
+            and any(eq in data.equipmentAccess for eq in ex["equipment"])
+            and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
+        ]
+
     selected_main = random.sample(main_pool, min(num_main_blocks, len(main_pool)))
     workout.extend(selected_main)
     time_budget -= 10 * len(selected_main)
 
-    # Conditioning
+    # 3. Conditioning at end
     if data.prepType in ["Conditioning", "Both"] and time_budget >= 10:
-        conditioning = filter_exercises(data.archetype, data.equipmentAccess, data.userPrefs, movement="Conditioning")
+        conditioning = try_filter(movement="Conditioning", relax_focus=True)
         if conditioning:
             workout.append(random.choice(conditioning))
             time_budget -= 10
 
-    # Format Response
+    # 4. Format for frontend
     output = []
     for ex in workout:
         ex_id = ex["name"].lower().replace(" ", "-")
@@ -139,17 +165,8 @@ def generate_workout(data: WorkoutRequest):
             "alternatives": random.sample(alts, min(3, len(alts))),
             "suggestion": suggestions.get(ex_id)
         })
-    return output
 
-@app.post("/log-workout")
-def log_workout(log: WorkoutLog):
-    for ex in log.exercises:
-        ex_id = ex["name"].lower().replace(" ", "-")
-        if ex_id not in user_logs:
-            user_logs[ex_id] = []
-        entry = {"date": log.date, "weights": ex.get("weights", [])}
-        user_logs[ex_id].append(entry)
-    return {"message": "Workout logged successfully."}
+    return output
 
 @app.post("/reshuffle-exercise", response_model=ExerciseOut)
 def reshuffle_exercise(data: dict):
