@@ -34,7 +34,13 @@ try:
             "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",")],
             "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",")],
             "otherTags": [t.strip() for t in str(row.get("Other Tags", "")).split(",")],
-            "bodyRegion": row.get("Body Region", "").strip()
+            "bodyRegion": row.get("Body Region", "").strip(),
+            "timeEstimate": row.get("TimeEstimate", "").strip(),
+            "muscleSubgroup": row.get("Muscle Subgroup", "").strip(),
+            "trainingPurpose": row.get("Training Purpose", "").strip(),
+            "tempoTags": row.get("Tempo Tags", "").strip(),
+            "fatigueLevel": row.get("Fatigue Level", "").strip(),
+            "locationType": row.get("LocationType", "").strip()
         })
 
     print("🧠 Sample WorkoutRoles:", list(set(ex["workoutRole"] for ex in EXERCISES)))
@@ -107,7 +113,6 @@ def generate_workout(data: WorkoutRequest):
     suggestions = check_for_static_weights(user_logs)
     workout = []
 
-    # --- Debug Filters ---
     print("🔍 Debug — Filtering MainCompound Pool:")
     print(f"🎯 Archetype: {data.archetype}")
     print(f"🎯 EquipmentAccess: {data.equipmentAccess}")
@@ -132,7 +137,6 @@ def generate_workout(data: WorkoutRequest):
     workout.append(main_lift)
     time_budget -= 10
 
-    # --- Step 2: Accessory Pool ---
     accessory_pool = [
         ex for ex in EXERCISES
         if ex["name"] != main_lift["name"]
@@ -146,7 +150,6 @@ def generate_workout(data: WorkoutRequest):
     selected = random.sample(accessory_pool, min(num_blocks, len(accessory_pool)))
     workout.extend(selected)
 
-    # --- Step 3: Format Output ---
     output = []
     for ex in workout:
         ex_id = ex["name"].lower().replace(" ", "-")
