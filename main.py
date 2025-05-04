@@ -20,10 +20,9 @@ app.add_middleware(
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ04XU88PE6x8GET2SblG-f7Gx-XWTvClQqm5QOdQ_EE682yDqMHY25EcR3N7qjIwa5lM_S_azLaM6n/pub?gid=1956029134&single=true&output=csv"
 
 EXERCISES = []
-
 try:
     df = pd.read_csv(CSV_URL)
-    print(f"✅ Loaded {len(df)} exercises from Google Sheets.")
+    print(f"\u2705 Loaded {len(df)} exercises from Google Sheets.")
 
     for _, row in df.iterrows():
         EXERCISES.append({
@@ -35,9 +34,8 @@ try:
             "otherTags": [t.strip() for t in str(row.get("Other Tags", "")).split(",")],
             "bodyRegion": row.get("Body Region", "").strip()
         })
-
 except Exception as e:
-    print("❌ Failed to load exercise list from Google Sheets:", e)
+    print("\u274c Failed to load exercise list from Google Sheets:", e)
 
 REST_TIME_DEFAULT = 60
 user_logs = {}
@@ -112,25 +110,37 @@ def generate_workout(data: WorkoutRequest):
         raise HTTPException(status_code=400, detail="Archetype is required.")
 
     data.equipmentAccess = determine_equipment(data.location, data.equipmentAccess)
-    time_budget = data.availableTime
     suggestions = check_for_static_weights(user_logs)
     workout = []
 
-    # 1. Warm-up block
-    if data.prepType in ["Warm-Up", "Both"] and time_budget >= 10:
+    # Reserve time for warm-up and/or conditioning
+    reserved_time = 0
+    if data.prepType in ["Warm-Up", "Both"]:
+        reserved_time += 5
+    if data.prepType in ["Conditioning", "Both"]:
+        reserved_time += 10
+
+    main_time_budget = data.availableTime - reserved_time
+    num_main_blocks = max(1, main_time_budget // 10)
+
+    # --- Warm-Up Block ---
+    if data.prepType in ["Warm-Up", "Both"]:
         warmups = try_filter(data, movement="Warm-Up")
         if warmups:
-            warmup = random.choice(warmups)
-            workout.append(warmup)
-            time_budget -= 10
+            workout.append(random.choice(warmups))
 
-    # 2. Main exercise blocks
-    num_main_blocks = max(1, time_budget // 10)
+    # --- Main Compound First ---
     main_pool = try_filter(data)
+    main_compounds = [ex for ex in main_pool if "MainCompound" in ex["otherTags"]]
+    if main_compounds:
+        main = random.choice(main_compounds)
+        workout.append(main)
+        main_pool = [ex for ex in main_pool if ex["name"] != main["name"]]
+        num_main_blocks -= 1
 
+    # --- Remaining Main Exercises ---
     if len(main_pool) < num_main_blocks:
         main_pool = try_filter(data, relax_focus=True)
-
     if len(main_pool) < num_main_blocks:
         main_pool = [
             ex for ex in EXERCISES
@@ -141,16 +151,14 @@ def generate_workout(data: WorkoutRequest):
 
     selected_main = random.sample(main_pool, min(num_main_blocks, len(main_pool)))
     workout.extend(selected_main)
-    time_budget -= 10 * len(selected_main)
 
-    # 3. Conditioning block
-    if data.prepType in ["Conditioning", "Both"] and time_budget >= 10:
+    # --- Conditioning Block ---
+    if data.prepType in ["Conditioning", "Both"]:
         conditioning = try_filter(data, movement="Conditioning", relax_focus=True)
         if conditioning:
             workout.append(random.choice(conditioning))
-            time_budget -= 10
 
-    # 4. Format for frontend
+    # --- Format Output ---
     output = []
     for ex in workout:
         ex_id = ex["name"].lower().replace(" ", "-")
