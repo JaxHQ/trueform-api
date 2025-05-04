@@ -48,7 +48,8 @@ class WorkoutRequest(BaseModel):
     availableTime: int
     lastWorked: Dict[str, int]
     weeklyVolume: Dict[str, int]
-    equipmentAccess: List[str]
+    equipmentAccess: Optional[List[str]] = Field(default_factory=list)
+    location: Optional[str] = Field(default=None)
     archetype: Optional[str] = Field(default=None)
     userPrefs: Optional[List[str]] = Field(default_factory=list)
     injuries: Optional[List[str]] = Field(default_factory=list)
@@ -83,6 +84,17 @@ def check_for_static_weights(logs: dict):
             suggestions[exercise_id] = "You've used the same weight 3 sessions in a row. Try increasing slightly."
     return suggestions
 
+def determine_equipment(location: str, user_equipment: List[str]) -> List[str]:
+    if user_equipment:
+        return user_equipment
+    if location == "Gym":
+        return ["Barbell", "Dumbbells", "Cable", "Machine", "Kettlebell", "Bodyweight"]
+    if location == "Home":
+        return ["Bodyweight", "Dumbbells", "Bands"]
+    if location == "Studio":
+        return ["Bodyweight", "Yoga Mat", "Boxing Bag", "Bands"]
+    return ["Bodyweight"]
+
 def try_filter(data, movement=None, relax_focus=False):
     return [
         ex for ex in EXERCISES
@@ -99,6 +111,7 @@ def generate_workout(data: WorkoutRequest):
     if not data.archetype:
         raise HTTPException(status_code=400, detail="Archetype is required.")
 
+    data.equipmentAccess = determine_equipment(data.location, data.equipmentAccess)
     time_budget = data.availableTime
     suggestions = check_for_static_weights(user_logs)
     workout = []
