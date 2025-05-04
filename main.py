@@ -16,23 +16,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Load Exercises ---
-CSV_PATH = "Updated_Exercise_List.csv"
-df = pd.read_csv(CSV_PATH)
+# --- Load Exercises from Google Sheets ---
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ04XU88PE6x8GET2SblG-f7Gx-XWTvClQqm5QOdQ_EE682yDqMHY25EcR3N7qjIwa5lM_S_azLaM6n/pub?gid=1956029134&single=true&output=csv"
 
 EXERCISES = []
-for _, row in df.iterrows():
-    EXERCISES.append({
-        "name": row["Exercise Name"],
-        "muscleGroup": row["Primary Muscle Group"],
-        "movementType": row["Movement Type"],
-        "equipment": [e.strip() for e in str(row["Equipment Used"]).split(",")],
-        "archetypes": [a.strip() for a in str(row["Archetype Tags"]).split(",")],
-        "otherTags": [t.strip() for t in str(row["Other Tags"]).split(",")],
-        "bodyRegion": row["Body Region"]
-    })
 
-print(f"✅ Loaded {len(EXERCISES)} exercises.")
+try:
+    df = pd.read_csv(CSV_URL)
+    print(f"✅ Loaded {len(df)} exercises from Google Sheets.")
+
+    for _, row in df.iterrows():
+        EXERCISES.append({
+            "name": row.get("Exercise Name", "").strip(),
+            "muscleGroup": row.get("Primary Muscle Group", "").strip(),
+            "movementType": row.get("Movement Type", "").strip(),
+            "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",")],
+            "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",")],
+            "otherTags": [t.strip() for t in str(row.get("Other Tags", "")).split(",")],
+            "bodyRegion": row.get("Body Region", "").strip()
+        })
+
+except Exception as e:
+    print("❌ Failed to load exercise list from Google Sheets:", e)
+
 REST_TIME_DEFAULT = 60
 user_logs = {}
 
@@ -48,7 +54,7 @@ class WorkoutRequest(BaseModel):
     injuries: Optional[List[str]] = Field(default_factory=list)
     focus: Optional[str] = Field(default="Full Body")
     prepType: Optional[str] = Field(default="Skip")
-    goal: Optional[str] = Field(default=None)  # ✅ This line is now safe
+    goal: Optional[str] = Field(default=None)
 
 class ExerciseOut(BaseModel):
     name: str
@@ -77,14 +83,14 @@ def check_for_static_weights(logs: dict):
             suggestions[exercise_id] = "You've used the same weight 3 sessions in a row. Try increasing slightly."
     return suggestions
 
-def filter_exercises(archetype, equipment, prefs=[], movement=None, focus=None):
+def try_filter(data, movement=None, relax_focus=False):
     return [
         ex for ex in EXERCISES
-        if archetype in ex["archetypes"]
-        and any(eq in equipment for eq in ex["equipment"])
+        if data.archetype in ex["archetypes"]
+        and any(eq in data.equipmentAccess for eq in ex["equipment"])
         and (not movement or ex["movementType"] == movement)
-        and (not focus or focus == "Full Body" or ex["bodyRegion"] == focus)
-        and not any(pref.lower() in ex["name"].lower() for pref in prefs)
+        and (relax_focus or data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
+        and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
     ]
 
 # --- Endpoints ---
@@ -97,21 +103,9 @@ def generate_workout(data: WorkoutRequest):
     suggestions = check_for_static_weights(user_logs)
     workout = []
 
-    def try_filter(movement=None, relax_focus=False):
-        pool = [
-            ex for ex in EXERCISES
-            if data.archetype in ex["archetypes"]
-            and any(eq in data.equipmentAccess for eq in ex["equipment"])
-            and (not movement or ex["movementType"] == movement)
-            and (relax_focus or data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
-            and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
-        ]
-        print(f"🎯 Filtered {len(pool)} exercises (movement={movement}, focus={data.focus}, relaxed={relax_focus})")
-        return pool
-
     # 1. Warm-up block
     if data.prepType in ["Warm-Up", "Both"] and time_budget >= 10:
-        warmups = try_filter(movement="Warm-Up")
+        warmups = try_filter(data, movement="Warm-Up")
         if warmups:
             warmup = random.choice(warmups)
             workout.append(warmup)
@@ -119,14 +113,12 @@ def generate_workout(data: WorkoutRequest):
 
     # 2. Main exercise blocks
     num_main_blocks = max(1, time_budget // 10)
-    main_pool = try_filter()
+    main_pool = try_filter(data)
 
     if len(main_pool) < num_main_blocks:
-        print("⚠️ Not enough with strict filters — relaxing focus")
-        main_pool = try_filter(relax_focus=True)
+        main_pool = try_filter(data, relax_focus=True)
 
     if len(main_pool) < num_main_blocks:
-        print("⚠️ Still not enough — removing movement filter")
         main_pool = [
             ex for ex in EXERCISES
             if data.archetype in ex["archetypes"]
@@ -138,9 +130,9 @@ def generate_workout(data: WorkoutRequest):
     workout.extend(selected_main)
     time_budget -= 10 * len(selected_main)
 
-    # 3. Conditioning at end
+    # 3. Conditioning block
     if data.prepType in ["Conditioning", "Both"] and time_budget >= 10:
-        conditioning = try_filter(movement="Conditioning", relax_focus=True)
+        conditioning = try_filter(data, movement="Conditioning", relax_focus=True)
         if conditioning:
             workout.append(random.choice(conditioning))
             time_budget -= 10
