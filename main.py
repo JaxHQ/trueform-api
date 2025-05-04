@@ -30,7 +30,7 @@ try:
             "name": row.get("Exercise Name", "").strip(),
             "muscleGroup": row.get("Primary Muscle Group", "").strip(),
             "movementType": row.get("Movement Type", "").strip(),
-            "workoutRole": row.get("Workout Role", "").strip(),
+            "workoutRole": row.get("WorkoutRole", "").strip(),
             "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",")],
             "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",")],
             "otherTags": [t.strip() for t in str(row.get("Other Tags", "")).split(",")],
