@@ -30,6 +30,7 @@ try:
             "name": row.get("Exercise Name", "").strip(),
             "muscleGroup": row.get("Primary Muscle Group", "").strip(),
             "movementType": row.get("Movement Type", "").strip(),
+            "workoutRole": row.get("Workout Role", "").strip(),
             "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",")],
             "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",")],
             "otherTags": [t.strip() for t in str(row.get("Other Tags", "")).split(",")],
@@ -104,19 +105,15 @@ def generate_workout(data: WorkoutRequest):
     suggestions = check_for_static_weights(user_logs)
     workout = []
 
-    # --- Step 1: Main Compound Lift ---
+    # --- Step 1: Main Compound ---
     main_pool = [
         ex for ex in EXERCISES
-        if "MainCompound" in ex["otherTags"]
+        if ex["workoutRole"] == "MainCompound"
         and data.archetype in ex["archetypes"]
         and any(eq in data.equipmentAccess for eq in ex["equipment"])
         and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         and (data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
     ]
-
-    if not main_pool:
-        print("⚠️ No strict main compound found — relaxing filters.")
-        main_pool = [ex for ex in EXERCISES if "MainCompound" in ex["otherTags"]]
 
     if not main_pool:
         raise HTTPException(status_code=404, detail="No main compound exercises found.")
@@ -125,7 +122,7 @@ def generate_workout(data: WorkoutRequest):
     workout.append(main_lift)
     time_budget -= 10
 
-    # --- Step 2: Accessory & Support Movements ---
+    # --- Step 2: Fill with Remaining Exercises ---
     accessory_pool = [
         ex for ex in EXERCISES
         if ex["name"] != main_lift["name"]
@@ -139,7 +136,7 @@ def generate_workout(data: WorkoutRequest):
     selected = random.sample(accessory_pool, min(num_blocks, len(accessory_pool)))
     workout.extend(selected)
 
-    # --- Step 3: Format output ---
+    # --- Step 3: Format ---
     output = []
     for ex in workout:
         ex_id = ex["name"].lower().replace(" ", "-")
