@@ -54,7 +54,6 @@ class WorkoutRequest(BaseModel):
     userPrefs: Optional[List[str]] = Field(default_factory=list)
     injuries: Optional[List[str]] = Field(default_factory=list)
     focus: Optional[str] = Field(default="Full Body")
-    prepType: Optional[str] = Field(default="Skip")
     goal: Optional[str] = Field(default=None)
 
 class ExerciseOut(BaseModel):
@@ -95,46 +94,38 @@ def determine_equipment(location: str, user_equipment: List[str]) -> List[str]:
         return ["Bodyweight", "Yoga Mat", "Boxing Bag", "Bands"]
     return ["Bodyweight"]
 
-def try_filter(data, movement=None, relax_focus=False):
-    return [
-        ex for ex in EXERCISES
-        if data.archetype in ex["archetypes"]
-        and any(eq in data.equipmentAccess for eq in ex["equipment"])
-        and (not movement or ex["movementType"] == movement)
-        and (relax_focus or data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
-        and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
-    ]
-
 @app.post("/generate-workout", response_model=List[ExerciseOut])
 def generate_workout(data: WorkoutRequest):
     if not data.archetype:
         raise HTTPException(status_code=400, detail="Archetype is required.")
 
-    # Use location to determine equipment if none provided
     data.equipmentAccess = determine_equipment(data.location, data.equipmentAccess)
     time_budget = data.availableTime
     suggestions = check_for_static_weights(user_logs)
     workout = []
 
-    # 1. Pick a Main Compound movement first
-    main_compounds = [
+    # --- Step 1: Main Compound Lift ---
+    main_pool = [
         ex for ex in EXERCISES
-        if "MainCompound" in ex["movementType"]
+        if "MainCompound" in ex["otherTags"]
         and data.archetype in ex["archetypes"]
         and any(eq in data.equipmentAccess for eq in ex["equipment"])
         and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         and (data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
     ]
 
-    if not main_compounds:
+    if not main_pool:
+        print("⚠️ No strict main compound found — relaxing filters.")
+        main_pool = [ex for ex in EXERCISES if "MainCompound" in ex["otherTags"]]
+
+    if not main_pool:
         raise HTTPException(status_code=404, detail="No main compound exercises found.")
 
-    main_lift = random.choice(main_compounds)
+    main_lift = random.choice(main_pool)
     workout.append(main_lift)
-    time_budget -= 10  # Main lift = ~10 min block
+    time_budget -= 10
 
-    # 2. Fill rest of workout with accessory/compound movements
-    num_blocks = max(1, time_budget // 10)
+    # --- Step 2: Accessory & Support Movements ---
     accessory_pool = [
         ex for ex in EXERCISES
         if ex["name"] != main_lift["name"]
@@ -144,10 +135,11 @@ def generate_workout(data: WorkoutRequest):
         and (data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
     ]
 
-    selected_accessories = random.sample(accessory_pool, min(num_blocks, len(accessory_pool)))
-    workout.extend(selected_accessories)
+    num_blocks = max(1, time_budget // 10)
+    selected = random.sample(accessory_pool, min(num_blocks, len(accessory_pool)))
+    workout.extend(selected)
 
-    # 3. Format for frontend
+    # --- Step 3: Format output ---
     output = []
     for ex in workout:
         ex_id = ex["name"].lower().replace(" ", "-")
