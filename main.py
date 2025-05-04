@@ -110,40 +110,44 @@ def generate_workout(data: WorkoutRequest):
     if not data.archetype:
         raise HTTPException(status_code=400, detail="Archetype is required.")
 
+    # Use location to determine equipment if none provided
     data.equipmentAccess = determine_equipment(data.location, data.equipmentAccess)
     time_budget = data.availableTime
-    warmup_time = 5 if data.prepType in ["Warm-Up", "Both"] else 0
-    conditioning_time = 10 if data.prepType in ["Conditioning", "Both"] else 0
-    strength_time = max(0, time_budget - warmup_time - conditioning_time)
-
-    workout = []
     suggestions = check_for_static_weights(user_logs)
+    workout = []
 
-    # Warm-Up
-    if warmup_time:
-        warmups = try_filter(data, movement="Warm-Up")
-        if warmups:
-            workout.append(random.choice(warmups))
+    # 1. Pick a Main Compound movement first
+    main_compounds = [
+        ex for ex in EXERCISES
+        if "MainCompound" in ex["movementType"]
+        and data.archetype in ex["archetypes"]
+        and any(eq in data.equipmentAccess for eq in ex["equipment"])
+        and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
+        and (data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
+    ]
 
-    # MainCompounds First
-    main_pool = try_filter(data)
-    main_compounds = [ex for ex in main_pool if "MainCompound" in ex["otherTags"]]
-    fillers = [ex for ex in main_pool if "MainCompound" not in ex["otherTags"]]
+    if not main_compounds:
+        raise HTTPException(status_code=404, detail="No main compound exercises found.")
 
-    blocks_needed = max(1, strength_time // 10)
-    selected_main = random.sample(main_compounds, min(blocks_needed, len(main_compounds)))
-    if len(selected_main) < blocks_needed:
-        selected_main += random.sample(fillers, min(blocks_needed - len(selected_main), len(fillers)))
+    main_lift = random.choice(main_compounds)
+    workout.append(main_lift)
+    time_budget -= 10  # Main lift = ~10 min block
 
-    workout.extend(selected_main)
+    # 2. Fill rest of workout with accessory/compound movements
+    num_blocks = max(1, time_budget // 10)
+    accessory_pool = [
+        ex for ex in EXERCISES
+        if ex["name"] != main_lift["name"]
+        and data.archetype in ex["archetypes"]
+        and any(eq in data.equipmentAccess for eq in ex["equipment"])
+        and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
+        and (data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
+    ]
 
-    # Conditioning
-    if conditioning_time:
-        conditioning = try_filter(data, movement="Conditioning", relax_focus=True)
-        if conditioning:
-            workout.append(random.choice(conditioning))
+    selected_accessories = random.sample(accessory_pool, min(num_blocks, len(accessory_pool)))
+    workout.extend(selected_accessories)
 
-    # Format Output
+    # 3. Format for frontend
     output = []
     for ex in workout:
         ex_id = ex["name"].lower().replace(" ", "-")
