@@ -23,7 +23,7 @@ EXERCISES = []
 
 try:
     df = pd.read_csv(CSV_URL)
-    print(f"\u2705 Loaded {len(df)} exercises from Google Sheets.")
+    print(f"✅ Loaded {len(df)} exercises from Google Sheets.")
 
     for _, row in df.iterrows():
         EXERCISES.append({
@@ -37,10 +37,10 @@ try:
             "bodyRegion": row.get("Body Region", "").strip()
         })
 
-    print("\U0001f9ea Sample workoutRoles:", list(set(ex["workoutRole"] for ex in EXERCISES)))
+    print("🧠 Sample WorkoutRoles:", list(set(ex["workoutRole"] for ex in EXERCISES)))
 
 except Exception as e:
-    print("\u274c Failed to load exercise list from Google Sheets:", e)
+    print("❌ Failed to load exercise list from Google Sheets:", e)
 
 REST_TIME_DEFAULT = 60
 user_logs = {}
@@ -107,24 +107,32 @@ def generate_workout(data: WorkoutRequest):
     suggestions = check_for_static_weights(user_logs)
     workout = []
 
-    # --- Step 1: Main Compound ---
-    main_pool = [
-        ex for ex in EXERCISES
-        if ex.get("workoutRole", "").strip().lower() == "maincompound"
-        and data.archetype in ex["archetypes"]
+    # --- Debug Filters ---
+    print("🔍 Debug — Filtering MainCompound Pool:")
+    print(f"🎯 Archetype: {data.archetype}")
+    print(f"🎯 EquipmentAccess: {data.equipmentAccess}")
+    print(f"🎯 Focus: {data.focus}")
+
+    all_main = [ex for ex in EXERCISES if ex.get("workoutRole", "").strip().lower() == "maincompound"]
+    print(f"✅ Total MainCompound in full list: {len(all_main)}")
+
+    filtered_main = [
+        ex for ex in all_main
+        if data.archetype in ex["archetypes"]
         and any(eq in data.equipmentAccess for eq in ex["equipment"])
         and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         and (data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
     ]
+    print(f"✅ Total MainCompound after filters: {len(filtered_main)}")
 
-    if not main_pool:
+    if not filtered_main:
         raise HTTPException(status_code=404, detail="No main compound exercises found.")
 
-    main_lift = random.choice(main_pool)
+    main_lift = random.choice(filtered_main)
     workout.append(main_lift)
     time_budget -= 10
 
-    # --- Step 2: Fill with Remaining Exercises ---
+    # --- Step 2: Accessory Pool ---
     accessory_pool = [
         ex for ex in EXERCISES
         if ex["name"] != main_lift["name"]
@@ -138,7 +146,7 @@ def generate_workout(data: WorkoutRequest):
     selected = random.sample(accessory_pool, min(num_blocks, len(accessory_pool)))
     workout.extend(selected)
 
-    # --- Step 3: Format ---
+    # --- Step 3: Format Output ---
     output = []
     for ex in workout:
         ex_id = ex["name"].lower().replace(" ", "-")
@@ -160,3 +168,43 @@ def generate_workout(data: WorkoutRequest):
         })
 
     return output
+
+@app.post("/reshuffle-exercise", response_model=ExerciseOut)
+def reshuffle_exercise(data: dict):
+    current_name = data.get("currentName")
+    muscle_group = data.get("muscleGroup")
+    equipment = data.get("equipmentAccess", [])
+    user_prefs = data.get("userPrefs", [])
+    archetype = data.get("archetype")
+    same_muscle = data.get("sameMuscle", True)
+
+    pool = [
+        ex for ex in EXERCISES
+        if ex["name"] != current_name
+        and (not same_muscle or ex["muscleGroup"] == muscle_group)
+        and any(e in equipment for e in ex["equipment"])
+        and not any(pref.lower() in ex["name"].lower() for pref in user_prefs)
+        and (not archetype or archetype in ex["archetypes"])
+    ]
+
+    if not pool:
+        raise HTTPException(status_code=404, detail="No suitable alternatives found.")
+
+    new_ex = random.choice(pool)
+    alts = [
+        alt["name"] for alt in pool
+        if alt["name"] != new_ex["name"]
+        and alt["muscleGroup"] == new_ex["muscleGroup"]
+        and alt["movementType"] == new_ex["movementType"]
+    ]
+
+    return {
+        "name": new_ex["name"],
+        "muscleGroup": new_ex["muscleGroup"],
+        "movementType": new_ex["movementType"],
+        "sets": 4,
+        "reps": "8-12",
+        "rest": REST_TIME_DEFAULT,
+        "alternatives": random.sample(alts, min(3, len(alts))),
+        "suggestion": None
+    }
