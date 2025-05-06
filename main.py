@@ -111,7 +111,10 @@ def generate_workout(data: WorkoutRequest):
     for subtype, sets, reps in plan:
         filtered = [
             ex for ex in EXERCISES
-            if subtype.lower() in ex.get("workoutSubtype", "").lower()
+            if (
+                subtype.lower() in ex.get("workoutSubtype", "").lower()
+                or subtype.lower() == ex.get("workoutRole", "").lower()
+            )
             and data.archetype in ex["archetypes"]
             and any(eq in data.equipmentAccess for eq in ex["equipment"])
             and (data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
