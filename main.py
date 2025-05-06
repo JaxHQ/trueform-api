@@ -31,14 +31,13 @@ try:
             "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",")],
             "workoutRole": row.get("Workout Role", "").strip().lower(),
             "workoutSubtype": row.get("Workout Subtype", "").strip().lower(),
-            "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).replace(", ", ",").split(",") if a.strip()],
+            "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",") if a.strip()],
         })
 except Exception as e:
     print("❌ Failed to load exercise list:", e)
 
 REST_TIME_DEFAULT = 60
 
-# --- Archetype Plan Logic ---
 ARCHETYPE_PLANS = {
     "Titan": [
         ("PowerCompound", 4, "5"),
