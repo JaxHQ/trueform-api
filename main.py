@@ -15,13 +15,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Load Exercises from Google Sheets ---
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ04XU88PE6x8GET2SblG-f7Gx-XWTvClQqm5QOdQ_EE682yDqMHY25EcR3N7qjIwa5lM_S_azLaM6n/pub?gid=1956029134&single=true&output=csv"
+# --- Load Local Cleaned CSV ---
+CSV_PATH = "Cleaned_Exercise_List.csv"
 
 EXERCISES = []
-
 try:
-    df = pd.read_csv(CSV_URL)
+    df = pd.read_csv(CSV_PATH)
     for _, row in df.iterrows():
         EXERCISES.append({
             "name": row.get("Exercise Name", "").strip(),
@@ -31,13 +30,14 @@ try:
             "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",")],
             "workoutRole": row.get("Workout Role", "").strip().lower(),
             "workoutSubtype": row.get("Workout Subtype", "").strip().lower(),
-            "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",") if a.strip()],
+            "archetype": row.get("Archetype Tags", "").strip(),  # now single value only
         })
 except Exception as e:
     print("❌ Failed to load exercise list:", e)
 
 REST_TIME_DEFAULT = 60
 
+# --- Archetype Plan Logic ---
 ARCHETYPE_PLANS = {
     "Titan": [
         ("PowerCompound", 4, "5"),
@@ -110,19 +110,17 @@ def generate_workout(data: WorkoutRequest):
     output = []
 
     for subtype, sets, reps in plan:
-        subtype_clean = subtype.strip().lower()
-
         filtered = [
             ex for ex in EXERCISES
-            if (
-                subtype_clean == ex.get("workoutSubtype", "").strip().lower()
-                or subtype_clean == ex.get("workoutRole", "").strip().lower()
+            if ex["archetype"] == data.archetype
+            and (
+                ex["workoutSubtype"] == subtype.lower()
+                or ex["workoutRole"] == subtype.lower()
             )
-            and data.archetype in ex["archetypes"]
             and any(eq in data.equipmentAccess for eq in ex["equipment"])
             and (
-                data.focus.strip().lower() == "full body"
-                or ex["bodyRegion"] == data.focus.strip().lower()
+                data.focus.lower() == "full body"
+                or ex["bodyRegion"] == data.focus.lower()
             )
             and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         ]
