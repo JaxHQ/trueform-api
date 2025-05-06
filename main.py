@@ -15,19 +15,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Load Exercises ---
+# --- Load Exercises from Google Sheets ---
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ04XU88PE6x8GET2SblG-f7Gx-XWTvClQqm5QOdQ_EE682yDqMHY25EcR3N7qjIwa5lM_S_azLaM6n/pub?output=csv"
 
 EXERCISES = []
+
 try:
-    df = pd.read_csv(CSV_URL).fillna("")  # prevent NaN .strip() errors
+    df = pd.read_csv(CSV_URL)
     for _, row in df.iterrows():
         EXERCISES.append({
             "name": str(row.get("Exercise Name", "")).strip(),
             "muscleGroup": str(row.get("Primary Muscle Group", "")).strip(),
             "bodyRegion": str(row.get("Body Region", "")).strip().lower(),
             "movementType": str(row.get("Movement Type", "")).strip(),
-            "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",") if e.strip()],
+            "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",")],
             "workoutRole": str(row.get("Workout Role", "")).strip().lower(),
             "workoutSubtype": str(row.get("Workout Subtype", "")).strip().lower(),
             "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",") if a.strip()],
@@ -68,6 +69,20 @@ ARCHETYPE_PLANS = {
     ],
 }
 
+SUBTYPE_TIMES = {
+    "powercompound": 10,
+    "volumecompound": 8,
+    "unilateralisolation": 6,
+    "bilateralisolation": 6,
+    "core": 5,
+    "explosive": 6,
+    "contrast set": 8,
+    "carry/load": 6,
+    "offset load": 6,
+    "isometric": 5,
+    "unilateralcompound": 6,
+}
+
 class WorkoutRequest(BaseModel):
     daysPerWeek: int
     availableTime: int
@@ -96,7 +111,6 @@ def generate_workout(data: WorkoutRequest):
     if not data.archetype:
         raise HTTPException(status_code=400, detail="Archetype is required.")
 
-    # Equipment fallback
     if data.location == "Home":
         data.equipmentAccess = ["Bodyweight"]
     elif not data.equipmentAccess:
@@ -107,15 +121,22 @@ def generate_workout(data: WorkoutRequest):
         raise HTTPException(status_code=400, detail="No plan for archetype.")
 
     output = []
+    current_time = 0
+    max_time = data.availableTime
 
     for subtype, sets, reps in plan:
         subtype_clean = subtype.strip().lower()
+        block_time = SUBTYPE_TIMES.get(subtype_clean, 6)
+
+        if current_time + block_time > max_time:
+            print(f"⏭ Skipping {subtype_clean} — not enough time.")
+            continue
 
         filtered = [
             ex for ex in EXERCISES
             if (
-                subtype_clean == ex["workoutSubtype"]
-                or subtype_clean == ex["workoutRole"]
+                subtype_clean == ex.get("workoutSubtype", "").strip().lower()
+                or subtype_clean == ex.get("workoutRole", "").strip().lower()
             )
             and data.archetype in ex["archetypes"]
             and any(eq in data.equipmentAccess for eq in ex["equipment"])
@@ -133,8 +154,7 @@ def generate_workout(data: WorkoutRequest):
         chosen = random.choice(filtered)
         alts = [
             alt["name"] for alt in filtered
-            if alt["name"] != chosen["name"]
-            and alt["muscleGroup"] == chosen["muscleGroup"]
+            if alt["name"] != chosen["name"] and alt["muscleGroup"] == chosen["muscleGroup"]
         ]
 
         output.append({
@@ -147,5 +167,7 @@ def generate_workout(data: WorkoutRequest):
             "alternatives": random.sample(alts, min(3, len(alts))),
             "suggestion": None
         })
+
+        current_time += block_time
 
     return output
