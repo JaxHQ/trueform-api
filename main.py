@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 import random
 import pandas as pd
 
@@ -15,11 +15,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Load Exercises from Google Sheets ---
+# --- Load Exercises ---
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ04XU88PE6x8GET2SblG-f7Gx-XWTvClQqm5QOdQ_EE682yDqMHY25EcR3N7qjIwa5lM_S_azLaM6n/pub?gid=1956029134&single=true&output=csv"
 
 EXERCISES = []
-
 try:
     df = pd.read_csv(CSV_URL)
     for _, row in df.iterrows():
@@ -36,9 +35,8 @@ try:
 except Exception as e:
     print("❌ Failed to load exercise list:", e)
 
+# --- Constants ---
 REST_TIME_DEFAULT = 60
-
-# --- Archetype Plan Logic ---
 ARCHETYPE_PLANS = {
     "Titan": [
         ("PowerCompound", 4, "5"),
@@ -70,6 +68,7 @@ ARCHETYPE_PLANS = {
     ],
 }
 
+# --- Request / Response Models ---
 class WorkoutRequest(BaseModel):
     daysPerWeek: int
     availableTime: int
@@ -93,12 +92,13 @@ class ExerciseOut(BaseModel):
     alternatives: List[str]
     suggestion: Optional[str] = None
 
+# --- Main Workout Generator ---
 @app.post("/generate-workout", response_model=List[ExerciseOut])
 def generate_workout(data: WorkoutRequest):
     if not data.archetype:
         raise HTTPException(status_code=400, detail="Archetype is required.")
 
-    # Equipment fallback logic
+    # Determine equipment
     if data.location == "Home":
         data.equipmentAccess = ["Bodyweight"]
     elif not data.equipmentAccess:
@@ -116,8 +116,8 @@ def generate_workout(data: WorkoutRequest):
         filtered = [
             ex for ex in EXERCISES
             if (
-                subtype_clean == ex.get("workoutSubtype", "").strip().lower()
-                or subtype_clean == ex.get("workoutRole", "").strip().lower()
+                subtype_clean == ex["workoutSubtype"].lower()
+                or subtype_clean == ex["workoutRole"].lower()
             )
             and data.archetype in ex["archetypes"]
             and any(eq in data.equipmentAccess for eq in ex["equipment"])
@@ -129,7 +129,7 @@ def generate_workout(data: WorkoutRequest):
         ]
 
         if not filtered:
-            print(f"⚠️ No exercises found for subtype '{subtype}' and archetype '{data.archetype}'")
+            print(f"⚠️ No exercises found for '{subtype}' and archetype '{data.archetype}'")
             continue
 
         chosen = random.choice(filtered)
