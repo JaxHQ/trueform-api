@@ -15,12 +15,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Load Local Cleaned CSV ---
-CSV_PATH = "Cleaned_Exercise_List.csv"
+# --- Load Exercises from Google Sheets ---
+CSV_URL = "https://docs.google.com/spreadsheets/d/1lK70MsuGcnEg2o-j10A24v_MTvF44ghPV_60nIVUwog/export?format=csv"
 
 EXERCISES = []
+
 try:
-    df = pd.read_csv(CSV_PATH)
+    df = pd.read_csv(CSV_URL)
     for _, row in df.iterrows():
         EXERCISES.append({
             "name": row.get("Exercise Name", "").strip(),
@@ -30,7 +31,7 @@ try:
             "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",")],
             "workoutRole": row.get("Workout Role", "").strip().lower(),
             "workoutSubtype": row.get("Workout Subtype", "").strip().lower(),
-            "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",")],  # even if single
+            "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",") if a.strip()],
         })
 except Exception as e:
     print("❌ Failed to load exercise list:", e)
@@ -113,15 +114,15 @@ def generate_workout(data: WorkoutRequest):
 
         filtered = [
             ex for ex in EXERCISES
-            if data.archetype in ex["archetypes"]
-            and (
-                ex["workoutSubtype"] == subtype_clean
-                or ex["workoutRole"] == subtype_clean
+            if (
+                subtype_clean == ex.get("workoutSubtype", "").strip().lower()
+                or subtype_clean == ex.get("workoutRole", "").strip().lower()
             )
+            and data.archetype in ex["archetypes"]
             and any(eq in data.equipmentAccess for eq in ex["equipment"])
             and (
-                data.focus.lower() == "full body"
-                or ex["bodyRegion"] == data.focus.lower()
+                data.focus.strip().lower() == "full body"
+                or ex["bodyRegion"] == data.focus.strip().lower()
             )
             and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         ]
