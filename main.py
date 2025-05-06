@@ -38,7 +38,6 @@ except Exception as e:
 
 REST_TIME_DEFAULT = 60
 
-# --- Archetype Plan Logic ---
 ARCHETYPE_PLANS = {
     "Titan": [
         ("PowerCompound", 4, "5"),
@@ -119,7 +118,10 @@ def generate_workout(data: WorkoutRequest):
             )
             and data.archetype in ex["archetypes"]
             and any(eq in data.equipmentAccess for eq in ex["equipment"])
-            and (data.focus == "Full Body" or ex["bodyRegion"].strip().lower() == data.focus.strip().lower())
+            and (
+                data.focus.lower() == "full body"
+                or ex["bodyRegion"].strip().lower() == data.focus.strip().lower()
+            )
             and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         ]
 
