@@ -118,6 +118,7 @@ def generate_workout(data: WorkoutRequest):
             and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         ]
         if not filtered:
+            print(f"⚠️ No exercises found for {subtype} and archetype {data.archetype}")
             continue
         chosen = random.choice(filtered)
         alts = [
