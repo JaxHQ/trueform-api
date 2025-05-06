@@ -15,22 +15,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Load Exercises from Google Sheets ---
-CSV_URL = "https://docs.google.com/spreadsheets/d/1lK70MsuGcnEg2o-j10A24v_MTvF44ghPV_60nIVUwog/export?format=csv"
+# --- Load Exercises ---
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ04XU88PE6x8GET2SblG-f7Gx-XWTvClQqm5QOdQ_EE682yDqMHY25EcR3N7qjIwa5lM_S_azLaM6n/pub?output=csv"
 
 EXERCISES = []
-
 try:
-    df = pd.read_csv(CSV_URL)
+    df = pd.read_csv(CSV_URL).fillna("")  # prevent NaN .strip() errors
     for _, row in df.iterrows():
         EXERCISES.append({
-            "name": row.get("Exercise Name", "").strip(),
-            "muscleGroup": row.get("Primary Muscle Group", "").strip(),
-            "bodyRegion": row.get("Body Region", "").strip().lower(),
-            "movementType": row.get("Movement Type", "").strip(),
-            "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",")],
-            "workoutRole": row.get("Workout Role", "").strip().lower(),
-            "workoutSubtype": row.get("Workout Subtype", "").strip().lower(),
+            "name": str(row.get("Exercise Name", "")).strip(),
+            "muscleGroup": str(row.get("Primary Muscle Group", "")).strip(),
+            "bodyRegion": str(row.get("Body Region", "")).strip().lower(),
+            "movementType": str(row.get("Movement Type", "")).strip(),
+            "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",") if e.strip()],
+            "workoutRole": str(row.get("Workout Role", "")).strip().lower(),
+            "workoutSubtype": str(row.get("Workout Subtype", "")).strip().lower(),
             "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",") if a.strip()],
         })
 except Exception as e:
@@ -97,7 +96,7 @@ def generate_workout(data: WorkoutRequest):
     if not data.archetype:
         raise HTTPException(status_code=400, detail="Archetype is required.")
 
-    # Equipment fallback logic
+    # Equipment fallback
     if data.location == "Home":
         data.equipmentAccess = ["Bodyweight"]
     elif not data.equipmentAccess:
@@ -115,8 +114,8 @@ def generate_workout(data: WorkoutRequest):
         filtered = [
             ex for ex in EXERCISES
             if (
-                subtype_clean == ex.get("workoutSubtype", "").strip().lower()
-                or subtype_clean == ex.get("workoutRole", "").strip().lower()
+                subtype_clean == ex["workoutSubtype"]
+                or subtype_clean == ex["workoutRole"]
             )
             and data.archetype in ex["archetypes"]
             and any(eq in data.equipmentAccess for eq in ex["equipment"])
