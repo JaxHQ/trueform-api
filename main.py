@@ -83,6 +83,13 @@ SUBTYPE_TIMES = {
     "unilateralcompound": 6,
 }
 
+REGION_MAP = {
+    "upper": "upper body",
+    "lower": "lower body",
+    "full body": "full body",
+    "core": "core"
+}
+
 class WorkoutRequest(BaseModel):
     daysPerWeek: int
     availableTime: int
@@ -123,6 +130,7 @@ def generate_workout(data: WorkoutRequest):
     output = []
     current_time = 0
     max_time = data.availableTime
+    focus_clean = data.focus.strip().lower()
 
     for subtype, sets, reps in plan:
         subtype_clean = subtype.strip().lower()
@@ -141,8 +149,8 @@ def generate_workout(data: WorkoutRequest):
             and data.archetype in ex["archetypes"]
             and any(eq in data.equipmentAccess for eq in ex["equipment"])
             and (
-                data.focus.strip().lower() == "full body"
-                or ex["bodyRegion"] == data.focus.strip().lower()
+                focus_clean == "full body"
+                or REGION_MAP.get(ex["bodyRegion"].strip().lower()) == focus_clean
             )
             and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         ]
