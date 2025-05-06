@@ -51,6 +51,25 @@ except Exception as e:
 REST_TIME_DEFAULT = 60
 user_logs = {}
 
+# --- Archetype Set & Rep Logic ---
+ARCHETYPE_PLANS = {
+    "Titan": [
+        ("MainCompound", 4, "6"),
+        ("MainCompound", 4, "6"),
+        ("Isolation", 3, "10-12"),
+        ("Isolation", 3, "10-12"),
+        ("Core", 3, "15")
+    ],
+    "Apex": [
+        ("PowerCompound", 3, "3-5"),
+        ("MainCompound", 3, "6-8"),
+        ("Isolation", 3, "10"),
+        ("Isolation", 3, "10-12"),
+        ("Core", 3, "20")
+    ]
+    # Add more archetypes here
+}
+
 # --- Models ---
 class WorkoutRequest(BaseModel):
     daysPerWeek: int
@@ -109,62 +128,43 @@ def generate_workout(data: WorkoutRequest):
         raise HTTPException(status_code=400, detail="Archetype is required.")
 
     data.equipmentAccess = determine_equipment(data.location, data.equipmentAccess)
-    time_budget = data.availableTime
     suggestions = check_for_static_weights(user_logs)
-    workout = []
 
-    print("🔍 Debug — Filtering MainCompound Pool:")
-    print(f"🎯 Archetype: {data.archetype}")
-    print(f"🎯 EquipmentAccess: {data.equipmentAccess}")
-    print(f"🎯 Focus: {data.focus}")
-
-    all_main = [ex for ex in EXERCISES if ex.get("workoutRole", "").strip().lower() == "maincompound"]
-    print(f"✅ Total MainCompound in full list: {len(all_main)}")
-
-    filtered_main = [
-        ex for ex in all_main
-        if data.archetype in ex["archetypes"]
-        and any(eq in data.equipmentAccess for eq in ex["equipment"])
-        and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
-        and (data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
-    ]
-    print(f"✅ Total MainCompound after filters: {len(filtered_main)}")
-
-    if not filtered_main:
-        raise HTTPException(status_code=404, detail="No main compound exercises found.")
-
-    main_lift = random.choice(filtered_main)
-    workout.append(main_lift)
-    time_budget -= 10
-
-    accessory_pool = [
-        ex for ex in EXERCISES
-        if ex["name"] != main_lift["name"]
-        and data.archetype in ex["archetypes"]
-        and any(eq in data.equipmentAccess for eq in ex["equipment"])
-        and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
-        and (data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
-    ]
-
-    num_blocks = max(1, time_budget // 10)
-    selected = random.sample(accessory_pool, min(num_blocks, len(accessory_pool)))
-    workout.extend(selected)
+    plan_structure = ARCHETYPE_PLANS.get(data.archetype)
+    if not plan_structure:
+        raise HTTPException(status_code=400, detail="No plan defined for this archetype.")
 
     output = []
-    for ex in workout:
-        ex_id = ex["name"].lower().replace(" ", "-")
-        alts = [
-            alt["name"] for alt in EXERCISES
-            if alt["name"] != ex["name"]
-            and alt["muscleGroup"] == ex["muscleGroup"]
-            and alt["movementType"] == ex["movementType"]
+
+    for role, sets, reps in plan_structure:
+        matching_exercises = [
+            ex for ex in EXERCISES
+            if ex.get("workoutRole", "").strip() == role
+            and data.archetype in ex["archetypes"]
+            and any(eq in data.equipmentAccess for eq in ex["equipment"])
+            and (data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
+            and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         ]
+
+        if not matching_exercises:
+            continue
+
+        selected = random.choice(matching_exercises)
+        ex_id = selected["name"].lower().replace(" ", "-")
+
+        alts = [
+            alt["name"] for alt in matching_exercises
+            if alt["name"] != selected["name"]
+            and alt["muscleGroup"] == selected["muscleGroup"]
+            and alt["movementType"] == selected["movementType"]
+        ]
+
         output.append({
-            "name": ex["name"],
-            "muscleGroup": ex["muscleGroup"],
-            "movementType": ex["movementType"],
-            "sets": 4,
-            "reps": "8-12",
+            "name": selected["name"],
+            "muscleGroup": selected["muscleGroup"],
+            "movementType": selected["movementType"],
+            "sets": sets,
+            "reps": reps,
             "rest": REST_TIME_DEFAULT,
             "alternatives": random.sample(alts, min(3, len(alts))),
             "suggestion": suggestions.get(ex_id)
