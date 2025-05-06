@@ -30,14 +30,13 @@ try:
             "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",")],
             "workoutRole": row.get("Workout Role", "").strip().lower(),
             "workoutSubtype": row.get("Workout Subtype", "").strip().lower(),
-            "archetype": row.get("Archetype Tags", "").strip(),  # now single value only
+            "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",")],  # even if single
         })
 except Exception as e:
     print("❌ Failed to load exercise list:", e)
 
 REST_TIME_DEFAULT = 60
 
-# --- Archetype Plan Logic ---
 ARCHETYPE_PLANS = {
     "Titan": [
         ("PowerCompound", 4, "5"),
@@ -110,12 +109,14 @@ def generate_workout(data: WorkoutRequest):
     output = []
 
     for subtype, sets, reps in plan:
+        subtype_clean = subtype.strip().lower()
+
         filtered = [
             ex for ex in EXERCISES
-            if ex["archetype"] == data.archetype
+            if data.archetype in ex["archetypes"]
             and (
-                ex["workoutSubtype"] == subtype.lower()
-                or ex["workoutRole"] == subtype.lower()
+                ex["workoutSubtype"] == subtype_clean
+                or ex["workoutRole"] == subtype_clean
             )
             and any(eq in data.equipmentAccess for eq in ex["equipment"])
             and (
