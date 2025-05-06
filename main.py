@@ -4,11 +4,9 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any
 import random
 import pandas as pd
-from datetime import datetime
 
 app = FastAPI()
 
-# --- CORS Setup ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,15 +14,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Load Exercises from Google Sheets ---
+# --- Load Exercise List from Google Sheets ---
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ04XU88PE6x8GET2SblG-f7Gx-XWTvClQqm5QOdQ_EE682yDqMHY25EcR3N7qjIwa5lM_S_azLaM6n/pub?gid=1956029134&single=true&output=csv"
-
 EXERCISES = []
 
 try:
     df = pd.read_csv(CSV_URL)
-    print(f"✅ Loaded {len(df)} exercises from Google Sheets.")
-
     for _, row in df.iterrows():
         EXERCISES.append({
             "name": row.get("Exercise Name", "").strip(),
@@ -33,56 +28,48 @@ try:
             "workoutRole": row.get("WorkoutRole", "").strip(),
             "equipment": [e.strip() for e in str(row.get("Equipment Used", "")).split(",")],
             "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",")],
-            "otherTags": [t.strip() for t in str(row.get("Other Tags", "")).split(",")],
             "bodyRegion": row.get("Body Region", "").strip(),
-            "timeEstimate": row.get("TimeEstimate", "").strip(),
-            "muscleSubgroup": row.get("Muscle Subgroup", "").strip(),
-            "trainingPurpose": row.get("Training Purpose", "").strip(),
-            "tempoTags": row.get("Tempo Tags", "").strip(),
-            "fatigueLevel": row.get("Fatigue Level", "").strip(),
-            "locationType": row.get("LocationType", "").strip()
         })
-
-    print("🧠 Sample WorkoutRoles:", list(set(ex["workoutRole"] for ex in EXERCISES)))
-
+    print(f"✅ Loaded {len(EXERCISES)} exercises.")
 except Exception as e:
-    print("❌ Failed to load exercise list from Google Sheets:", e)
+    print("❌ Failed to load exercises:", e)
 
-REST_TIME_DEFAULT = 60
-user_logs = {}
-
-# --- Archetype Set & Rep Logic ---
-ARCHETYPE_PLANS = {
+# --- Archetype-Based Workout Templates ---
+ARCHETYPE_TEMPLATES = {
     "Titan": [
         ("MainCompound", 4, "6"),
         ("MainCompound", 4, "6"),
         ("Isolation", 3, "10-12"),
         ("Isolation", 3, "10-12"),
-        ("Core", 3, "15")
+        ("Core", 3, "15"),
     ],
     "Apex": [
         ("PowerCompound", 3, "3-5"),
         ("MainCompound", 3, "6-8"),
         ("Isolation", 3, "10"),
         ("Isolation", 3, "10-12"),
-        ("Core", 3, "20")
+        ("Core", 3, "20"),
+    ],
+    "Vanguard": [
+        ("MainCompound", 4, "6-8"),
+        ("Isolation", 3, "10-12"),
+        ("Core", 3, "15"),
+    ],
+    "Prime": [
+        ("MainCompound", 3, "5-8"),
+        ("Isolation", 3, "8-10"),
+        ("Core", 3, "15-20"),
     ]
-    # Add more archetypes here
 }
 
 # --- Models ---
 class WorkoutRequest(BaseModel):
-    daysPerWeek: int
     availableTime: int
-    lastWorked: Dict[str, int]
-    weeklyVolume: Dict[str, int]
     equipmentAccess: Optional[List[str]] = Field(default_factory=list)
     location: Optional[str] = Field(default=None)
     archetype: Optional[str] = Field(default=None)
     userPrefs: Optional[List[str]] = Field(default_factory=list)
-    injuries: Optional[List[str]] = Field(default_factory=list)
     focus: Optional[str] = Field(default="Full Body")
-    goal: Optional[str] = Field(default=None)
 
 class ExerciseOut(BaseModel):
     name: str
@@ -92,122 +79,54 @@ class ExerciseOut(BaseModel):
     reps: str
     rest: int
     alternatives: List[str]
-    suggestion: Optional[str] = None
 
-class WorkoutLog(BaseModel):
-    userId: str
-    date: str
-    exercises: List[Dict[str, Any]]
-    duration: int
-
-# --- Helpers ---
-def check_for_static_weights(logs: dict):
-    suggestions = {}
-    for exercise_id, entries in logs.items():
-        if len(entries) < 3:
-            continue
-        last_3_weights = [tuple(entry["weights"]) for entry in entries[-3:]]
-        if all(w == last_3_weights[0] for w in last_3_weights):
-            suggestions[exercise_id] = "You've used the same weight 3 sessions in a row. Try increasing slightly."
-    return suggestions
-
-def determine_equipment(location: str, user_equipment: List[str]) -> List[str]:
-    if user_equipment:
-        return user_equipment
+# --- Utility ---
+def get_equipment(location: str) -> List[str]:
+    if location == "Home":
+        return ["Bodyweight"]
     if location == "Gym":
         return ["Barbell", "Dumbbells", "Cable", "Machine", "Kettlebell", "Bodyweight"]
-    if location == "Home":
-        return ["Bodyweight", "Dumbbells", "Bands"]
-    if location == "Studio":
-        return ["Bodyweight", "Yoga Mat", "Boxing Bag", "Bands"]
     return ["Bodyweight"]
 
+# --- Workout Generator ---
 @app.post("/generate-workout", response_model=List[ExerciseOut])
 def generate_workout(data: WorkoutRequest):
-    if not data.archetype:
-        raise HTTPException(status_code=400, detail="Archetype is required.")
-
-    data.equipmentAccess = determine_equipment(data.location, data.equipmentAccess)
-    suggestions = check_for_static_weights(user_logs)
-
-    plan_structure = ARCHETYPE_PLANS.get(data.archetype)
-    if not plan_structure:
-        raise HTTPException(status_code=400, detail="No plan defined for this archetype.")
-
+    if not data.archetype or data.archetype not in ARCHETYPE_TEMPLATES:
+        raise HTTPException(status_code=400, detail="Archetype required or not supported.")
+    
+    equipment = get_equipment(data.location)
+    template = ARCHETYPE_TEMPLATES[data.archetype]
     output = []
 
-    for role, sets, reps in plan_structure:
-        matching_exercises = [
+    for role, sets, reps in template:
+        filtered = [
             ex for ex in EXERCISES
-            if ex.get("workoutRole", "").strip() == role
+            if role.lower() == ex["workoutRole"].strip().lower()
             and data.archetype in ex["archetypes"]
-            and any(eq in data.equipmentAccess for eq in ex["equipment"])
             and (data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
+            and any(eq in equipment for eq in ex["equipment"])
             and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         ]
 
-        if not matching_exercises:
+        if not filtered:
             continue
 
-        selected = random.choice(matching_exercises)
-        ex_id = selected["name"].lower().replace(" ", "-")
-
+        chosen = random.choice(filtered)
         alts = [
-            alt["name"] for alt in matching_exercises
-            if alt["name"] != selected["name"]
-            and alt["muscleGroup"] == selected["muscleGroup"]
-            and alt["movementType"] == selected["movementType"]
+            alt["name"] for alt in filtered
+            if alt["name"] != chosen["name"]
+            and alt["muscleGroup"] == chosen["muscleGroup"]
+            and alt["movementType"] == chosen["movementType"]
         ]
 
         output.append({
-            "name": selected["name"],
-            "muscleGroup": selected["muscleGroup"],
-            "movementType": selected["movementType"],
+            "name": chosen["name"],
+            "muscleGroup": chosen["muscleGroup"],
+            "movementType": chosen["movementType"],
             "sets": sets,
             "reps": reps,
-            "rest": REST_TIME_DEFAULT,
-            "alternatives": random.sample(alts, min(3, len(alts))),
-            "suggestion": suggestions.get(ex_id)
+            "rest": 60,
+            "alternatives": random.sample(alts, min(3, len(alts)))
         })
 
     return output
-
-@app.post("/reshuffle-exercise", response_model=ExerciseOut)
-def reshuffle_exercise(data: dict):
-    current_name = data.get("currentName")
-    muscle_group = data.get("muscleGroup")
-    equipment = data.get("equipmentAccess", [])
-    user_prefs = data.get("userPrefs", [])
-    archetype = data.get("archetype")
-    same_muscle = data.get("sameMuscle", True)
-
-    pool = [
-        ex for ex in EXERCISES
-        if ex["name"] != current_name
-        and (not same_muscle or ex["muscleGroup"] == muscle_group)
-        and any(e in equipment for e in ex["equipment"])
-        and not any(pref.lower() in ex["name"].lower() for pref in user_prefs)
-        and (not archetype or archetype in ex["archetypes"])
-    ]
-
-    if not pool:
-        raise HTTPException(status_code=404, detail="No suitable alternatives found.")
-
-    new_ex = random.choice(pool)
-    alts = [
-        alt["name"] for alt in pool
-        if alt["name"] != new_ex["name"]
-        and alt["muscleGroup"] == new_ex["muscleGroup"]
-        and alt["movementType"] == new_ex["movementType"]
-    ]
-
-    return {
-        "name": new_ex["name"],
-        "muscleGroup": new_ex["muscleGroup"],
-        "movementType": new_ex["movementType"],
-        "sets": 4,
-        "reps": "8-12",
-        "rest": REST_TIME_DEFAULT,
-        "alternatives": random.sample(alts, min(3, len(alts))),
-        "suggestion": None
-    }
