@@ -38,36 +38,14 @@ except Exception as e:
 
 REST_TIME_DEFAULT = 60
 
-ARCHETYPE_PLANS = {
-    "Titan": [
-        ("PowerCompound", 4, "5"),
-        ("VolumeCompound", 4, "6"),
-        ("BilateralIsolation", 3, "10-12"),
-        ("BilateralIsolation", 3, "10-12"),
-        ("Core", 3, "15"),
-    ],
-    "Apex": [
-        ("PowerCompound", 3, "3-5"),
-        ("VolumeCompound", 3, "6-8"),
-        ("UnilateralIsolation", 3, "10"),
-        ("BilateralIsolation", 3, "10-12"),
-        ("Core", 3, "20"),
-    ],
-    "Vanguard": [
-        ("Offset Load", 3, "6-8"),
-        ("UnilateralCompound", 3, "8"),
-        ("Isometric", 3, "20-30s"),
-        ("Carry/Load", 3, "30s"),
-        ("Core", 3, "15"),
-    ],
-    "Prime": [
-        ("PowerCompound", 3, "3-5"),
-        ("Explosive", 3, "5"),
-        ("Contrast Set", 3, "6"),
-        ("UnilateralIsolation", 2, "8-10"),
-        ("Core", 3, "20"),
-    ],
-}
+# Simplified fallback plan for now
+FALLBACK_PLAN = [
+    ("PowerCompound", 4, "5"),
+    ("VolumeCompound", 4, "6"),
+    ("VolumeCompound", 3, "8-10"),
+    ("Core", 3, "15"),
+    ("Core", 3, "20"),
+]
 
 SUBTYPE_TIMES = {
     "powercompound": 10,
@@ -115,17 +93,13 @@ class ExerciseOut(BaseModel):
 
 @app.post("/generate-workout", response_model=List[ExerciseOut])
 def generate_workout(data: WorkoutRequest):
-    if not data.archetype:
-        raise HTTPException(status_code=400, detail="Archetype is required.")
-
+    # Equipment setup
     if data.location == "Home":
         data.equipmentAccess = ["Bodyweight"]
     elif not data.equipmentAccess:
         data.equipmentAccess = ["Barbell", "Dumbbell", "Cable", "Kettlebell", "Machine", "Bodyweight"]
 
-    plan = ARCHETYPE_PLANS.get(data.archetype)
-    if not plan:
-        raise HTTPException(status_code=400, detail="No plan for archetype.")
+    plan = FALLBACK_PLAN
 
     output = []
     current_time = 0
@@ -146,17 +120,17 @@ def generate_workout(data: WorkoutRequest):
                 subtype_clean == ex.get("workoutSubtype", "").strip().lower()
                 or subtype_clean == ex.get("workoutRole", "").strip().lower()
             )
-            and data.archetype in ex["archetypes"]
             and any(eq in data.equipmentAccess for eq in ex["equipment"])
             and (
                 focus_clean == "full body"
+                or ex["workoutSubtype"] == "core"
                 or REGION_MAP.get(ex["bodyRegion"].strip().lower()) == focus_clean
             )
             and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         ]
 
         if not filtered:
-            print(f"⚠️ No exercises found for subtype '{subtype}' and archetype '{data.archetype}'")
+            print(f"⚠️ No exercises found for subtype '{subtype}'")
             continue
 
         chosen = random.choice(filtered)
