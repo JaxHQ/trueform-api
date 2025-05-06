@@ -38,6 +38,7 @@ except Exception as e:
 
 REST_TIME_DEFAULT = 60
 
+# --- Archetype Plan Logic ---
 ARCHETYPE_PLANS = {
     "Titan": [
         ("PowerCompound", 4, "5"),
@@ -109,26 +110,30 @@ def generate_workout(data: WorkoutRequest):
     output = []
 
     for subtype, sets, reps in plan:
+        subtype_clean = subtype.strip().lower()
         filtered = [
             ex for ex in EXERCISES
             if (
-                subtype.lower() in ex.get("workoutSubtype", "").lower()
-                or subtype.lower() == ex.get("workoutRole", "").lower()
+                subtype_clean in ex.get("workoutSubtype", "").strip().lower()
+                or subtype_clean in ex.get("workoutRole", "").strip().lower()
             )
             and data.archetype in ex["archetypes"]
             and any(eq in data.equipmentAccess for eq in ex["equipment"])
-            and (data.focus == "Full Body" or ex["bodyRegion"] == data.focus)
+            and (data.focus == "Full Body" or ex["bodyRegion"].strip().lower() == data.focus.strip().lower())
             and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         ]
+
         if not filtered:
-            print(f"⚠️ No exercises found for {subtype} and archetype {data.archetype}")
+            print(f"⚠️ No exercises found for subtype '{subtype}' and archetype '{data.archetype}'")
             continue
+
         chosen = random.choice(filtered)
         alts = [
             alt["name"] for alt in filtered
             if alt["name"] != chosen["name"]
             and alt["muscleGroup"] == chosen["muscleGroup"]
         ]
+
         output.append({
             "name": chosen["name"],
             "muscleGroup": chosen["muscleGroup"],
