@@ -14,6 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Load CSV from Google Sheets URL
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ04XU88PE6x8GET2SblG-f7Gx-XWTvClQqm5QOdQ_EE682yDqMHY25EcR3N7qjIwa5lM_S_azLaM6n/pub?output=csv"
 
 EXERCISES = []
@@ -25,9 +26,9 @@ try:
         EXERCISES.append({
             "name": str(row["Exercise Name"]).strip(),
             "muscleGroup": str(row["Primary Muscle Group"]).strip(),
-            "bodyRegion": str(row["Body Region"]).strip().lower(),
+            "bodyRegion": str(row["Body Region"]).strip().lower(),  # Already lowercase
             "movementType": str(row["Movement Type"]).strip(),
-            "equipment": [e.strip() for e in str(row["Equipment Used"]).split(",")],
+            "equipment": [e.strip() for e in str(row["Equipment Used"]).split(",") if e.strip()],
             "workoutRole": str(row["Workout Role"]).strip().lower(),
             "workoutSubtype": str(row["Workout Subtype"]).strip().lower(),
             "archetypes": [a.strip() for a in str(row["Archetype Tags"]).split(",") if a.strip()],
@@ -39,39 +40,39 @@ REST_TIME_DEFAULT = 60
 
 ARCHETYPE_PLANS = {
     "Apex": [
-        ("powercompound", 3, "3-5"),
+        ("powercompound", 3, "3-5"),  # Main lift
         ("volumecompound", 3, "6-8"),
         ("unilateralisolation", 3, "10"),
         ("bilateralisolation", 3, "10-12"),
-        ("core", 3, "20"),
+        ("core", 3, "20"),  # Core last
     ],
     "Prime": [
-        ("powercompound", 3, "3-5"),
+        ("powercompound", 3, "3-5"),  # Main lift
         ("explosive", 3, "5"),
         ("contrast set", 3, "6"),
         ("unilateralisolation", 2, "8-10"),
-        ("core", 3, "20"),
+        ("core", 3, "20"),  # Core last
     ],
     "Titan": [
-        ("powercompound", 4, "5"),
+        ("powercompound", 4, "5"),  # Main lift
         ("volumecompound", 4, "6"),
         ("bilateralisolation", 3, "10-12"),
         ("bilateralisolation", 3, "10-12"),
-        ("core", 3, "15"),
+        ("core", 3, "15"),  # Core last
     ],
     "Vanguard": [
-        ("offset load", 3, "6-8"),
+        ("offset load", 3, "6-8"),  # Main lift (no powercompound, so offset load is prioritized)
         ("unilateralcompound", 3, "8"),
         ("isometric", 3, "20-30s"),
         ("carry/load", 3, "30s"),
-        ("core", 3, "15"),
+        ("core", 3, "15"),  # Core last
     ],
     "Bodyweight": [
+        ("free", 3, "10-15"),  # Main lift (bodyweight equivalent)
         ("free", 3, "10-15"),
         ("free", 3, "10-15"),
         ("free", 3, "10-15"),
-        ("free", 3, "10-15"),
-        ("core", 3, "20"),
+        ("core", 3, "20"),  # Core last
     ]
 }
 
@@ -99,7 +100,7 @@ class WorkoutRequest(BaseModel):
     location: Optional[str] = None
     archetype: str
     userPrefs: Optional[List[str]] = Field(default_factory=list)
-    focus: Optional[str] = Field(default="Full Body")
+    focus: Optional[str] = Field(default="Full Body")  # Upper, Lower, or Full Body
 
 class ExerciseOut(BaseModel):
     name: str
@@ -125,30 +126,82 @@ def generate_workout(data: WorkoutRequest):
     if not plan:
         raise HTTPException(status_code=400, detail="Invalid archetype")
 
+    # Normalize focus to lowercase and validate
+    focus = data.focus.lower().replace(" ", "")  # Remove spaces for "Full Body"
+    focus_map = {
+        "upper": "upper",
+        "upperbody": "upper",
+        "lower": "lower",
+        "lowerbody": "lower",
+        "fullbody": "full body",
+        "full": "full body"
+    }
+    if focus not in focus_map:
+        raise HTTPException(status_code=400, detail="Focus must be Upper, Lower, or Full Body")
+    focus = focus_map[focus]  # Map to internal lowercase format
+
     output = []
     current_time = 0
     max_time = data.availableTime
 
-    for idx, (subtype, sets, reps) in enumerate(plan):
+    # Ensure main lift (first in plan) and core (last in plan) are included
+    main_lift = plan[0]  # First exercise is the main lift
+    core_exercise = plan[-1]  # Last exercise is core
+    remaining_plan = plan[1:-1]  # Middle exercises to fill time
+
+    # Helper function to filter exercises
+    def filter_exercises(subtype, sets, reps):
         subtype_clean = subtype.strip().lower()
         block_time = SUBTYPE_TIMES.get(subtype_clean, 6)
 
-        if current_time + block_time > max_time:
-            break
+        # Adjust body region based on focus
+        body_region_filter = (
+            ["upper"] if focus == "upper" else
+            ["lower"] if focus == "lower" else
+            ["upper", "lower", "full body", "core"]
+        )
 
         filtered = [
             ex for ex in EXERCISES
             if (
-                subtype_clean == "free"
-                or subtype_clean == ex["workoutSubtype"].strip().lower()
-                or subtype_clean == ex["workoutRole"].strip().lower()
+                (subtype_clean == "free" or
+                 subtype_clean == ex["workoutSubtype"].strip().lower() or
+                 subtype_clean == ex["workoutRole"].strip().lower())
+                and (data.archetype in ex["archetypes"] or data.archetype == "Bodyweight")
+                and any(eq in data.equipmentAccess for eq in ex["equipment"])
+                and ex["bodyRegion"] in body_region_filter
+                and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
             )
-            and (data.archetype in ex["archetypes"] or data.archetype == "Bodyweight")
-            and any(eq in data.equipmentAccess for eq in ex["equipment"])
-            and (subtype_clean == "core" or ex["bodyRegion"] != "core")
-            and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
         ]
 
+        return filtered, block_time
+
+    # Add main lift
+    filtered, block_time = filter_exercises(*main_lift)
+    if filtered and current_time + block_time <= max_time:
+        chosen = random.choice(filtered)
+        alts = [
+            alt["name"] for alt in filtered
+            if alt["name"] != chosen["name"] and alt["muscleGroup"] == chosen["muscleGroup"]
+        ]
+        output.append({
+            "name": chosen["name"],
+            "muscleGroup": chosen["muscleGroup"],
+            "movementType": chosen["movementType"],
+            "sets": main_lift[1],
+            "reps": main_lift[2],
+            "rest": REST_TIME_DEFAULT,
+            "alternatives": random.sample(alts, min(3, len(alts))),
+            "suggestion": "Main lift to start the workout"
+        })
+        current_time += block_time
+
+    # Add middle exercises based on available time
+    for subtype, sets, reps in remaining_plan:
+        if current_time + SUBTYPE_TIMES.get(subtype.lower(), 6) > max_time - SUBTYPE_TIMES.get("core", 5):
+            break  # Reserve time for core
+
+        filtered, block_time = filter_exercises(subtype, sets, reps)
         if not filtered:
             continue
 
@@ -157,7 +210,6 @@ def generate_workout(data: WorkoutRequest):
             alt["name"] for alt in filtered
             if alt["name"] != chosen["name"] and alt["muscleGroup"] == chosen["muscleGroup"]
         ]
-
         output.append({
             "name": chosen["name"],
             "muscleGroup": chosen["muscleGroup"],
@@ -168,7 +220,28 @@ def generate_workout(data: WorkoutRequest):
             "alternatives": random.sample(alts, min(3, len(alts))),
             "suggestion": None
         })
-
         current_time += block_time
+
+    # Add core exercise
+    filtered, block_time = filter_exercises(*core_exercise)
+    if filtered and current_time + block_time <= max_time:
+        chosen = random.choice(filtered)
+        alts = [
+            alt["name"] for alt in filtered
+            if alt["name"] != chosen["name"] and alt["muscleGroup"] == chosen["muscleGroup"]
+        ]
+        output.append({
+            "name": chosen["name"],
+            "muscleGroup": chosen["muscleGroup"],
+            "movementType": chosen["movementType"],
+            "sets": core_exercise[1],
+            "reps": core_exercise[2],
+            "rest": REST_TIME_DEFAULT,
+            "alternatives": random.sample(alts, min(3, len(alts))),
+            "suggestion": "Core exercise to finish the workout"
+        })
+
+    if not output:
+        raise HTTPException(status_code=400, detail="No exercises found matching criteria")
 
     return output
