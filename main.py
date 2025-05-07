@@ -26,7 +26,7 @@ try:
         EXERCISES.append({
             "name": str(row["Exercise Name"]).strip(),
             "muscleGroup": str(row["Primary Muscle Group"]).strip(),
-            "bodyRegion": str(row["Body Region"]).strip().lower(),  # Already lowercase
+            "bodyRegion": str(row["Body Region"]).strip().lower(),
             "movementType": str(row["Movement Type"]).strip(),
             "equipment": [e.strip() for e in str(row["Equipment Used"]).split(",") if e.strip()],
             "workoutRole": str(row["Workout Role"]).strip().lower(),
@@ -39,13 +39,6 @@ except Exception as e:
 REST_TIME_DEFAULT = 60
 
 ARCHETYPE_PLANS = {
-    "Apex": [
-        ("powercompound", 3, "3-5"),  # Main lift
-        ("volumecompound", 3, "6-8"),
-        ("unilateralisolation", 3, "10"),
-        ("bilateralisolation", 3, "10-12"),
-        ("core", 3, "20"),  # Core last
-    ],
     "Prime": [
         ("powercompound", 3, "3-5"),  # Main lift
         ("explosive", 3, "5"),
@@ -61,18 +54,20 @@ ARCHETYPE_PLANS = {
         ("core", 3, "15"),  # Core last
     ],
     "Vanguard": [
-        ("offset load", 3, "6-8"),  # Main lift (no powercompound, so offset load is prioritized)
+        ("offset load", 3, "6-8"),  # Main lift
         ("unilateralcompound", 3, "8"),
         ("isometric", 3, "20-30s"),
         ("carry/load", 3, "30s"),
         ("core", 3, "15"),  # Core last
     ],
     "Bodyweight": [
-        ("free", 3, "10-15"),  # Main lift (bodyweight equivalent)
-        ("free", 3, "10-15"),
-        ("free", 3, "10-15"),
-        ("free", 3, "10-15"),
-        ("core", 3, "20"),  # Core last
+        ("mobility", 2, "30-60s"),  # Main lift (mobility to start)
+        ("explosive", 2, "5-6"),
+        ("lowercompound", 2, "10-15"),
+        ("uppercompound", 2, "8-12"),
+        ("unilateral", 2, "8-10"),
+        ("isometric", 2, "20-30s"),
+        ("core", 2, "20"),  # Core last
     ]
 }
 
@@ -88,7 +83,10 @@ SUBTYPE_TIMES = {
     "offset load": 6,
     "isometric": 5,
     "unilateralcompound": 6,
-    "free": 6,
+    "mobility": 5,
+    "lowercompound": 6,
+    "uppercompound": 6,
+    "unilateral": 6,
 }
 
 class WorkoutRequest(BaseModel):
@@ -164,10 +162,12 @@ def generate_workout(data: WorkoutRequest):
         filtered = [
             ex for ex in EXERCISES
             if (
-                (subtype_clean == "free" or
-                 subtype_clean == ex["workoutSubtype"].strip().lower() or
+                (subtype_clean == ex["workoutSubtype"].strip().lower() or
                  subtype_clean == ex["workoutRole"].strip().lower())
-                and (data.archetype in ex["archetypes"] or data.archetype == "Bodyweight")
+                and (
+                    data.archetype == "Bodyweight" and "BodyWeight" in ex["archetypes"] or
+                    data.archetype in ex["archetypes"]
+                )
                 and any(eq in data.equipmentAccess for eq in ex["equipment"])
                 and ex["bodyRegion"] in body_region_filter
                 and not any(pref.lower() in ex["name"].lower() for pref in data.userPrefs)
