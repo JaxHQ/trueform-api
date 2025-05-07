@@ -38,6 +38,13 @@ except Exception as e:
 
 REST_TIME_DEFAULT = 60
 
+# Map session types to archetypes for new users
+SESSION_TYPE_TO_ARCHETYPE = {
+    "Weight Training": "Titan",
+    "Conditioning": "Prime",
+    "Mobility & Recovery": "Bodyweight",
+}
+
 ARCHETYPE_PLANS = {
     "Prime": [
         ("powercompound", 3, "3-5"),  # Main lift
@@ -90,15 +97,16 @@ SUBTYPE_TIMES = {
 }
 
 class WorkoutRequest(BaseModel):
-    daysPerWeek: int
-    availableTime: int
-    lastWorked: Dict[str, int]
-    weeklyVolume: Dict[str, int]
+    sessionType: str  # Required: e.g., "Weight Training"
+    availableTime: int  # Required: Time in minutes
+    focus: str  # Required: "Upper", "Lower", or "Full Body"
+    daysPerWeek: Optional[int] = None
+    lastWorked: Optional[Dict[str, int]] = Field(default_factory=dict)
+    weeklyVolume: Optional[Dict[str, int]] = Field(default_factory=dict)
     equipmentAccess: Optional[List[str]] = Field(default_factory=list)
     location: Optional[str] = None
-    archetype: str
+    archetype: Optional[str] = None  # Will be inferred from sessionType if not provided
     userPrefs: Optional[List[str]] = Field(default_factory=list)
-    focus: Optional[str] = Field(default="Full Body")  # Upper, Lower, or Full Body
 
 class ExerciseOut(BaseModel):
     name: str
@@ -112,9 +120,13 @@ class ExerciseOut(BaseModel):
 
 @app.post("/generate-workout", response_model=List[ExerciseOut])
 def generate_workout(data: WorkoutRequest):
+    # Infer archetype from sessionType if not provided (for new users)
     if not data.archetype:
-        raise HTTPException(status_code=400, detail="Archetype is required.")
+        data.archetype = SESSION_TYPE_TO_ARCHETYPE.get(data.sessionType)
+        if not data.archetype:
+            raise HTTPException(status_code=400, detail="Invalid session type")
 
+    # Default equipment access for new users
     if data.archetype == "Bodyweight":
         data.equipmentAccess = ["Bodyweight"]
     elif not data.equipmentAccess:
@@ -136,7 +148,7 @@ def generate_workout(data: WorkoutRequest):
     }
     if focus not in focus_map:
         raise HTTPException(status_code=400, detail="Focus must be Upper, Lower, or Full Body")
-    focus = focus_map[focus]  # Map to internal lowercase format
+    focus = focus_map[focus]
 
     output = []
     current_time = 0
