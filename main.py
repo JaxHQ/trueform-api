@@ -152,12 +152,15 @@ def generate_workout(data: WorkoutRequest):
         subtype_clean = subtype.strip().lower()
         block_time = SUBTYPE_TIMES.get(subtype_clean, 6)
 
-        # Adjust body region based on focus
-        body_region_filter = (
-            ["upper"] if focus == "upper" else
-            ["lower"] if focus == "lower" else
-            ["upper", "lower", "full body", "core"]
-        )
+        # Adjust body region based on focus, but allow core for core subtype
+        if subtype_clean == "core":
+            body_region_filter = ["core"]  # Only core exercises for core subtype
+        else:
+            body_region_filter = (
+                ["upper"] if focus == "upper" else
+                ["lower"] if focus == "lower" else
+                ["upper", "lower", "full body", "core"]
+            )
 
         filtered = [
             ex for ex in EXERCISES
