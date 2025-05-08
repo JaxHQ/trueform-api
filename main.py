@@ -307,7 +307,10 @@ class ConditioningBlock(BaseModel):
 def generate_conditioning(data: ConditioningRequest):
     archetype = data.archetype
     duration = data.duration
-    equipment = data.equipmentAccess or []
+    equipment = data.equipmentAccess or [
+    "AirBike", "Treadmill", "Rowing Machine", "Jump Rope", "Battle Ropes", 
+    "Spin Bike", "StepMill", "Weighted Vest", "Bodyweight", "Kettlebell", "Medicine Ball"
+]
 
     if archetype not in CONDITIONING_BLOCKS:
         raise HTTPException(status_code=400, detail="Invalid conditioning archetype.")
