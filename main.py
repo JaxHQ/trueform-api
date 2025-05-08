@@ -335,7 +335,7 @@ def generate_conditioning(data: ConditioningRequest):
             print(f"⚠️ No conditioning exercises found for: {subtype}")
             continue
 
-        selected = random.sample(matching, min(count, len(matching)))
+        selected = random.sample(matching, min(5, len(matching)))  # or 3 if you want fewer options
         for ex in selected:
             output.append({
                 "name": ex["name"],
