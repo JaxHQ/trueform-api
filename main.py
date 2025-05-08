@@ -14,7 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load CSV from Google Sheets URL
+# this is weight training csv
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ04XU88PE6x8GET2SblG-f7Gx-XWTvClQqm5QOdQ_EE682yDqMHY25EcR3N7qjIwa5lM_S_azLaM6n/pub?output=csv"
 
 EXERCISES = []
@@ -247,5 +247,106 @@ def generate_workout(data: WorkoutRequest):
 
     if not output:
         raise HTTPException(status_code=400, detail="No exercises found matching criteria")
+
+    return output
+
+# Load Conditioning Exercises
+CONDITIONING_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjruXErFS6DomownUiQwpOpG_bRGoFTIkzv0uj8fI6dPKh6-nt3KBZ69XdHVqj_lfUFkNTX7FSQkIN/pub?output=csv"
+
+CONDITIONING_EXERCISES = []
+try:
+    df_cond = pd.read_csv(CONDITIONING_CSV)
+    df_cond = df_cond[df_cond['Exercise Name'].notna()]
+    for _, row in df_cond.iterrows():
+        CONDITIONING_EXERCISES.append({
+            "name": str(row["Exercise Name"]).strip(),
+            "workoutSubtype": str(row["Workout Subtype"]).strip().lower(),
+            "archetypes": [a.strip() for a in str(row["Archetype Tags"]).split(",") if a.strip()],
+            "equipment": [e.strip() for e in str(row["Equipment Used"]).split(",") if e.strip()],
+            "workDuration": str(row.get("Work Duration", "30s")),
+            "restDuration": str(row.get("Rest Duration", "30s")),
+            "suggestedRounds": int(row.get("Suggested Rounds", 3)),
+            "isTimed": str(row.get("Is Timed", "TRUE")).lower() == "true",
+            "intensityRange": str(row.get("Intensity Range", "Moderate")),
+        })
+except Exception as e:
+    print("❌ Failed to load conditioning exercise list:", e)
+
+# Conditioning Block Plan
+CONDITIONING_BLOCKS = {
+    "Igniter": {
+        15: [("sprintblock", 1), ("hiitfinish", 1)],
+        30: [("sprintblock", 1), ("explosivecircuit", 1), ("hiitfinish", 1)],
+        45: [("sprintblock", 2), ("explosivecircuit", 2), ("hiitfinish", 1)],
+    },
+    "Engine": {
+        15: [("zone2block", 1)],
+        30: [("zone2block", 1), ("tempoblock", 1)],
+        45: [("zone2block", 1), ("tempoblock", 1)],
+        60: [("zone2block", 1), ("tempoblock", 1)],
+    }
+}
+
+class ConditioningRequest(BaseModel):
+    archetype: str  # "Igniter" or "Engine"
+    duration: int  # 15, 30, 45, or 60
+    equipmentAccess: Optional[List[str]] = Field(default_factory=list)
+
+class ConditioningBlock(BaseModel):
+    name: str
+    blockType: str
+    workDuration: str
+    restDuration: str
+    suggestedRounds: int
+    isTimed: bool
+    intensityRange: str
+    equipment: List[str]
+    archetype: str
+
+@app.post("/generate-conditioning", response_model=List[ConditioningBlock])
+def generate_conditioning(data: ConditioningRequest):
+    archetype = data.archetype
+    duration = data.duration
+    equipment = data.equipmentAccess or []
+
+    if archetype not in CONDITIONING_BLOCKS:
+        raise HTTPException(status_code=400, detail="Invalid conditioning archetype.")
+
+    time_plan = CONDITIONING_BLOCKS[archetype].get(duration)
+    if not time_plan:
+        raise HTTPException(status_code=400, detail="Invalid time selection for archetype.")
+
+    output = []
+
+    for subtype, count in time_plan:
+        matching = [
+            ex for ex in CONDITIONING_EXERCISES
+            if (
+                ex["workoutSubtype"].strip().lower() == subtype
+                and archetype in ex["archetypes"]
+                and any(eq in equipment for eq in ex["equipment"])
+            )
+        ]
+
+        if not matching:
+            print(f"⚠️ No conditioning exercises found for: {subtype}")
+            continue
+
+        selected = random.sample(matching, min(count, len(matching)))
+        for ex in selected:
+            output.append({
+                "name": ex["name"],
+                "blockType": ex["workoutSubtype"],
+                "workDuration": ex["workDuration"],
+                "restDuration": ex["restDuration"],
+                "suggestedRounds": ex["suggestedRounds"],
+                "isTimed": ex["isTimed"],
+                "intensityRange": ex["intensityRange"],
+                "equipment": ex["equipment"],
+                "archetype": archetype
+            })
+
+    if not output:
+        raise HTTPException(status_code=404, detail="No matching conditioning blocks found.")
 
     return output
