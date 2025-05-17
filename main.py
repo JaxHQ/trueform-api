@@ -14,32 +14,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# CSV loading
+# ----------- LOAD MOBILITY EXERCISES -----------
+
 MOBILITY_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJq8tvNY3AwbGsEKqP0UDhoK6WCBcQfo320JREqMfBiaUtYzRuu2t1oqkNsoR6vpQX-26NknHa7W1H/pub?output=csv"
+
 MOBILITY_BLOCKS = []
 
 try:
     df = pd.read_csv(MOBILITY_CSV)
     df = df[df["Exercise Name"].notna()]
+
     for _, row in df.iterrows():
         MOBILITY_BLOCKS.append({
             "name": str(row["Exercise Name"]).strip(),
-            "blockType": str(row["Type"]).strip(),
+            "blockType": str(row["Workout Subtype"]).strip(),
             "workDuration": str(row.get("Work Duration", "30s")).strip(),
             "restDuration": str(row.get("Rest Duration", "15s")).strip(),
             "suggestedRounds": int(row.get("Suggested Rounds", 1)),
             "isTimed": str(row.get("Is Timed", "TRUE")).lower() == "true",
             "intensityRange": str(row.get("Intensity Range", "Low")).strip(),
             "trainingPurpose": str(row.get("Training Purpose", "")).strip(),
-            "archetypes": [a.strip() for a in str(row["Archretype Tags"]).split(",") if a.strip()],
+            "archetypes": [a.strip() for a in str(row.get("Archetype Tags", "")).split(",") if a.strip()],
         })
-    print("✅ Loaded mobility blocks:", len(MOBILITY_BLOCKS))
 except Exception as e:
-    print("❌ Failed to load mobility blocks:", e)
+    print("❌ Failed to load mobility exercises:", e)
 
-# Request/Response models
+# ----------- SCHEMA -----------
+
 class MobilityRequest(BaseModel):
-    duration: int  # in minutes
+    duration: int  # e.g., 10, 20, 30 mins
     archetype: str = "Sentinel"
 
 class MobilityBlock(BaseModel):
@@ -51,17 +54,19 @@ class MobilityBlock(BaseModel):
     isTimed: bool
     intensityRange: str
     trainingPurpose: str
-    archetype: str
+    archetypes: List[str]
 
-# Endpoint
+# ----------- GENERATE ENDPOINT -----------
+
 @app.post("/generate-mobility", response_model=List[MobilityBlock])
 def generate_mobility(data: MobilityRequest):
-    archetype = data.archetype
     duration_seconds = data.duration * 60
-    blocks_to_return = duration_seconds // 130
+    blocks_to_return = duration_seconds // 130  # flat 130s per block
 
-    # Filter only blocks that contain the selected archetype
-    matching_blocks = [b for b in MOBILITY_BLOCKS if archetype in b["archetypes"]]
+    matching_blocks = [
+        block for block in MOBILITY_BLOCKS
+        if data.archetype in block["archetypes"]
+    ]
 
     if blocks_to_return <= 0 or not matching_blocks:
         raise HTTPException(status_code=404, detail="Not enough data to generate session.")
