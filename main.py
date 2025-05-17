@@ -17,19 +17,6 @@ app.add_middleware(
 # Sentinel Mobility CSV
 MOBILITY_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJq8tvNY3AwbGsEKqP0UDhoK6WCBcQfo320JREqMfBiaUtYzRuu2t1oqkNsoR6vpQX-26NknHa7W1H/pub?output=csv"
 
-# Helper to normalize duration values
-def normalize_duration(raw: str) -> str:
-    raw = str(raw).strip().lower()
-    if "min" in raw:
-        try:
-            mins = int(raw.split()[0])
-            return f"{mins * 60}s"
-        except:
-            return "60s"
-    if raw.isdigit():
-        return f"{raw}s"
-    return raw
-
 MOBILITY_BLOCKS = []
 try:
     df_mob = pd.read_csv(MOBILITY_CSV)
@@ -38,47 +25,33 @@ try:
         MOBILITY_BLOCKS.append({
             "name": str(row["Exercise Name"]).strip(),
             "blockType": str(row["Type"]).strip(),
-            "workDuration": normalize_duration(row.get("Work Duration", "30s")),
-            "restDuration": normalize_duration(row.get("Rest Duration", "15s")),
+            "workDuration": str(row.get("Work Duration", "30s")).strip(),
+            "restDuration": str(row.get("Rest Duration", "15s")).strip(),
             "suggestedRounds": int(row.get("Suggested Rounds", 1)),
             "isTimed": str(row.get("Is Timed", "TRUE")).lower() == "true",
-            "intensityRange": str(row.get("Intensity Range", "Low")),
+            "intensityRange": str(row.get("Intensity Range", "Low")).strip(),
             "trainingPurpose": str(row.get("Training Purpose", "")).strip(),
             "archetype": "Sentinel"
         })
 except Exception as e:
     print("❌ Failed to load mobility exercises:", e)
 
-class MobilityRequest(BaseModel):
-    duration: int  # 10, 20, 30
-    archetype: str = "Sentinel"
-
-class MobilityBlock(BaseModel):
-    name: str
-    blockType: str
-    workDuration: str
-    restDuration: str
-    suggestedRounds: int
-    isTimed: bool
-    intensityRange: str
-    trainingPurpose: str
-    archetype: str
-
 @app.post("/generate-mobility", response_model=List[MobilityBlock])
 def generate_mobility(data: MobilityRequest):
     archetype = data.archetype
-    duration = data.duration
+    duration = data.duration  # user-specified: 10, 20, 30 min
 
     if archetype != "Sentinel":
         raise HTTPException(status_code=400, detail="Only 'Sentinel' supported for now.")
 
-    # Basic logic: return enough blocks to fill duration (each block ~2 min)
-    time_per_block = 2
-    num_blocks = min(len(MOBILITY_BLOCKS), duration // time_per_block)
-    if num_blocks == 0:
-        raise HTTPException(status_code=404, detail="Not enough time for a session.")
+    # Ignore actual durations, assume each block takes ~130s (2 min)
+    assumed_time_per_block = 2  # minutes
+    max_blocks = duration // assumed_time_per_block
 
-    selected = random.sample(MOBILITY_BLOCKS, num_blocks)
+    if max_blocks <= 0 or not MOBILITY_BLOCKS:
+        raise HTTPException(status_code=404, detail="Not enough time or data for a session.")
+
+    selected = random.sample(MOBILITY_BLOCKS, min(max_blocks, len(MOBILITY_BLOCKS)))
 
     return selected
 # this is weight training csv
