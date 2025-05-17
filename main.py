@@ -14,10 +14,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Sentinel Mobility CSV
+# -------------------------
+# 🧠 Pydantic Models
+# -------------------------
+
+class MobilityRequest(BaseModel):
+    duration: int  # in minutes (e.g., 10, 20, 30)
+    archetype: str = "Sentinel"
+
+class MobilityBlock(BaseModel):
+    name: str
+    blockType: str
+    workDuration: str
+    restDuration: str
+    suggestedRounds: int
+    isTimed: bool
+    intensityRange: str
+    trainingPurpose: str
+    archetype: str
+
+# -------------------------
+# 📥 Load Mobility Exercises
+# -------------------------
+
 MOBILITY_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJq8tvNY3AwbGsEKqP0UDhoK6WCBcQfo320JREqMfBiaUtYzRuu2t1oqkNsoR6vpQX-26NknHa7W1H/pub?output=csv"
 
 MOBILITY_BLOCKS = []
+
 try:
     df_mob = pd.read_csv(MOBILITY_CSV)
     df_mob = df_mob[df_mob['Exercise Name'].notna()]
@@ -36,16 +59,20 @@ try:
 except Exception as e:
     print("❌ Failed to load mobility exercises:", e)
 
+# -------------------------
+# 🚀 API Endpoint
+# -------------------------
+
 @app.post("/generate-mobility", response_model=List[MobilityBlock])
 def generate_mobility(data: MobilityRequest):
     archetype = data.archetype
-    duration = data.duration  # user-specified: 10, 20, 30 min
+    duration = data.duration  # e.g. 10, 20, 30 (in minutes)
 
     if archetype != "Sentinel":
         raise HTTPException(status_code=400, detail="Only 'Sentinel' supported for now.")
 
-    # Ignore actual durations, assume each block takes ~130s (2 min)
-    assumed_time_per_block = 2  # minutes
+    # Estimate 1 block = 2 minutes (approx)
+    assumed_time_per_block = 2
     max_blocks = duration // assumed_time_per_block
 
     if max_blocks <= 0 or not MOBILITY_BLOCKS:
