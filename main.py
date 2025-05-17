@@ -17,6 +17,19 @@ app.add_middleware(
 # Sentinel Mobility CSV
 MOBILITY_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJq8tvNY3AwbGsEKqP0UDhoK6WCBcQfo320JREqMfBiaUtYzRuu2t1oqkNsoR6vpQX-26NknHa7W1H/pub?output=csv"
 
+# Helper to normalize duration values
+def normalize_duration(raw: str) -> str:
+    raw = str(raw).strip().lower()
+    if "min" in raw:
+        try:
+            mins = int(raw.split()[0])
+            return f"{mins * 60}s"
+        except:
+            return "60s"
+    if raw.isdigit():
+        return f"{raw}s"
+    return raw
+
 MOBILITY_BLOCKS = []
 try:
     df_mob = pd.read_csv(MOBILITY_CSV)
@@ -24,9 +37,9 @@ try:
     for _, row in df_mob.iterrows():
         MOBILITY_BLOCKS.append({
             "name": str(row["Exercise Name"]).strip(),
-            "blockType": str(row["Type"]).strip(),  # e.g. MobilityFlow or StretchHold
-            "workDuration": str(row.get("Work Duration", "30s")),
-            "restDuration": str(row.get("Rest Duration", "15s")),
+            "blockType": str(row["Type"]).strip(),
+            "workDuration": normalize_duration(row.get("Work Duration", "30s")),
+            "restDuration": normalize_duration(row.get("Rest Duration", "15s")),
             "suggestedRounds": int(row.get("Suggested Rounds", 1)),
             "isTimed": str(row.get("Is Timed", "TRUE")).lower() == "true",
             "intensityRange": str(row.get("Intensity Range", "Low")),
@@ -59,7 +72,7 @@ def generate_mobility(data: MobilityRequest):
     if archetype != "Sentinel":
         raise HTTPException(status_code=400, detail="Only 'Sentinel' supported for now.")
 
-    # Basic logic: return enough blocks to fill duration (estimate each block is ~2 min)
+    # Basic logic: return enough blocks to fill duration (each block ~2 min)
     time_per_block = 2
     num_blocks = min(len(MOBILITY_BLOCKS), duration // time_per_block)
     if num_blocks == 0:
@@ -67,8 +80,7 @@ def generate_mobility(data: MobilityRequest):
 
     selected = random.sample(MOBILITY_BLOCKS, num_blocks)
 
-    return selected   
-
+    return selected
 # this is weight training csv
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ04XU88PE6x8GET2SblG-f7Gx-XWTvClQqm5QOdQ_EE682yDqMHY25EcR3N7qjIwa5lM_S_azLaM6n/pub?output=csv"
 
