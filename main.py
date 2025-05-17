@@ -14,12 +14,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -------------------------
-# 🧠 Pydantic Models
-# -------------------------
+# CSV loading
+MOBILITY_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJq8tvNY3AwbGsEKqP0UDhoK6WCBcQfo320JREqMfBiaUtYzRuu2t1oqkNsoR6vpQX-26NknHa7W1H/pub?output=csv"
+MOBILITY_BLOCKS = []
 
+try:
+    df = pd.read_csv(MOBILITY_CSV)
+    df = df[df["Exercise Name"].notna()]
+    for _, row in df.iterrows():
+        MOBILITY_BLOCKS.append({
+            "name": str(row["Exercise Name"]).strip(),
+            "blockType": str(row["Type"]).strip(),
+            "workDuration": str(row.get("Work Duration", "30s")).strip(),
+            "restDuration": str(row.get("Rest Duration", "15s")).strip(),
+            "suggestedRounds": int(row.get("Suggested Rounds", 1)),
+            "isTimed": str(row.get("Is Timed", "TRUE")).lower() == "true",
+            "intensityRange": str(row.get("Intensity Range", "Low")).strip(),
+            "trainingPurpose": str(row.get("Training Purpose", "")).strip(),
+            "archetype": "Sentinel"
+        })
+    print("✅ Loaded mobility blocks:", len(MOBILITY_BLOCKS))
+except Exception as e:
+    print("❌ Failed to load mobility blocks:", e)
+
+# Request/Response models
 class MobilityRequest(BaseModel):
-    duration: int  # in minutes (e.g., 10, 20, 30)
+    duration: int  # in minutes
     archetype: str = "Sentinel"
 
 class MobilityBlock(BaseModel):
@@ -33,54 +53,22 @@ class MobilityBlock(BaseModel):
     trainingPurpose: str
     archetype: str
 
-# -------------------------
-# 📥 Load Mobility Exercises
-# -------------------------
-
-MOBILITY_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJq8tvNY3AwbGsEKqP0UDhoK6WCBcQfo320JREqMfBiaUtYzRuu2t1oqkNsoR6vpQX-26NknHa7W1H/pub?output=csv"
-
-MOBILITY_BLOCKS = []
-
-try:
-    df_mob = pd.read_csv(MOBILITY_CSV)
-    df_mob = df_mob[df_mob['Exercise Name'].notna()]
-    for _, row in df_mob.iterrows():
-        MOBILITY_BLOCKS.append({
-            "name": str(row["Exercise Name"]).strip(),
-            "blockType": str(row["Type"]).strip(),
-            "workDuration": str(row.get("Work Duration", "30s")).strip(),
-            "restDuration": str(row.get("Rest Duration", "15s")).strip(),
-            "suggestedRounds": int(row.get("Suggested Rounds", 1)),
-            "isTimed": str(row.get("Is Timed", "TRUE")).lower() == "true",
-            "intensityRange": str(row.get("Intensity Range", "Low")).strip(),
-            "trainingPurpose": str(row.get("Training Purpose", "")).strip(),
-            "archetype": "Sentinel"
-        })
-except Exception as e:
-    print("❌ Failed to load mobility exercises:", e)
-
-# -------------------------
-# 🚀 API Endpoint
-# -------------------------
-
+# Endpoint
 @app.post("/generate-mobility", response_model=List[MobilityBlock])
 def generate_mobility(data: MobilityRequest):
-    archetype = data.archetype
-    duration_minutes = data.duration
-    duration_seconds = duration_minutes * 60
-    seconds_per_block = 130  # each block = 130s estimated
+    if data.archetype != "Sentinel":
+        raise HTTPException(status_code=400, detail="Only 'Sentinel' archetype supported.")
 
-    if archetype != "Sentinel":
-        raise HTTPException(status_code=400, detail="Only 'Sentinel' supported for now.")
+    # Assume each block = 130 seconds
+    duration_seconds = data.duration * 60
+    blocks_to_return = duration_seconds // 130
 
-    max_blocks = duration_seconds // seconds_per_block
+    if blocks_to_return <= 0 or not MOBILITY_BLOCKS:
+        raise HTTPException(status_code=404, detail="Not enough data to generate session.")
 
-    if max_blocks <= 0 or not MOBILITY_BLOCKS:
-        raise HTTPException(status_code=404, detail="Not enough time or data for a session.")
-
-    selected = random.sample(MOBILITY_BLOCKS, min(max_blocks, len(MOBILITY_BLOCKS)))
-
+    selected = random.sample(MOBILITY_BLOCKS, min(blocks_to_return, len(MOBILITY_BLOCKS)))
     return selected
+
 # this is weight training csv
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ04XU88PE6x8GET2SblG-f7Gx-XWTvClQqm5QOdQ_EE682yDqMHY25EcR3N7qjIwa5lM_S_azLaM6n/pub?output=csv"
 
