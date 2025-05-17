@@ -14,6 +14,61 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Sentinel Mobility CSV
+MOBILITY_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJq8tvNY3AwbGsEKqP0UDhoK6WCBcQfo320JREqMfBiaUtYzRuu2t1oqkNsoR6vpQX-26NknHa7W1H/pub?output=csv"
+
+MOBILITY_BLOCKS = []
+try:
+    df_mob = pd.read_csv(MOBILITY_CSV)
+    df_mob = df_mob[df_mob['Exercise Name'].notna()]
+    for _, row in df_mob.iterrows():
+        MOBILITY_BLOCKS.append({
+            "name": str(row["Exercise Name"]).strip(),
+            "blockType": str(row["Type"]).strip(),  # e.g. MobilityFlow or StretchHold
+            "workDuration": str(row.get("Work Duration", "30s")),
+            "restDuration": str(row.get("Rest Duration", "15s")),
+            "suggestedRounds": int(row.get("Suggested Rounds", 1)),
+            "isTimed": str(row.get("Is Timed", "TRUE")).lower() == "true",
+            "intensityRange": str(row.get("Intensity Range", "Low")),
+            "trainingPurpose": str(row.get("Training Purpose", "")).strip(),
+            "archetype": "Sentinel"
+        })
+except Exception as e:
+    print("❌ Failed to load mobility exercises:", e)
+
+class MobilityRequest(BaseModel):
+    duration: int  # 10, 20, 30
+    archetype: str = "Sentinel"
+
+class MobilityBlock(BaseModel):
+    name: str
+    blockType: str
+    workDuration: str
+    restDuration: str
+    suggestedRounds: int
+    isTimed: bool
+    intensityRange: str
+    trainingPurpose: str
+    archetype: str
+
+@app.post("/generate-mobility", response_model=List[MobilityBlock])
+def generate_mobility(data: MobilityRequest):
+    archetype = data.archetype
+    duration = data.duration
+
+    if archetype != "Sentinel":
+        raise HTTPException(status_code=400, detail="Only 'Sentinel' supported for now.")
+
+    # Basic logic: return enough blocks to fill duration (estimate each block is ~2 min)
+    time_per_block = 2
+    num_blocks = min(len(MOBILITY_BLOCKS), duration // time_per_block)
+    if num_blocks == 0:
+        raise HTTPException(status_code=404, detail="Not enough time for a session.")
+
+    selected = random.sample(MOBILITY_BLOCKS, num_blocks)
+
+    return selected   
+
 # this is weight training csv
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ04XU88PE6x8GET2SblG-f7Gx-XWTvClQqm5QOdQ_EE682yDqMHY25EcR3N7qjIwa5lM_S_azLaM6n/pub?output=csv"
 
@@ -335,7 +390,7 @@ def generate_conditioning(data: ConditioningRequest):
             print(f"⚠️ No conditioning exercises found for: {subtype}")
             continue
 
-        selected = random.sample(matching, min(5, len(matching)))  # or 3 if you want fewer options
+        selected = random.sample(matching, min(count, len(matching)))
         for ex in selected:
             output.append({
                 "name": ex["name"],
