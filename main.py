@@ -56,17 +56,17 @@ class MobilityBlock(BaseModel):
 # Endpoint
 @app.post("/generate-mobility", response_model=List[MobilityBlock])
 def generate_mobility(data: MobilityRequest):
-    if data.archetype != "Sentinel":
-        raise HTTPException(status_code=400, detail="Only 'Sentinel' archetype supported.")
-
-    # Assume each block = 130 seconds
+    archetype = data.archetype
     duration_seconds = data.duration * 60
     blocks_to_return = duration_seconds // 130
 
-    if blocks_to_return <= 0 or not MOBILITY_BLOCKS:
+    # Filter only blocks that contain the selected archetype
+    matching_blocks = [b for b in MOBILITY_BLOCKS if archetype in b["archetypes"]]
+
+    if blocks_to_return <= 0 or not matching_blocks:
         raise HTTPException(status_code=404, detail="Not enough data to generate session.")
 
-    selected = random.sample(MOBILITY_BLOCKS, min(blocks_to_return, len(MOBILITY_BLOCKS)))
+    selected = random.sample(matching_blocks, min(blocks_to_return, len(matching_blocks)))
     return selected
 
 # this is weight training csv
