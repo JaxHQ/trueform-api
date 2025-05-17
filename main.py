@@ -66,14 +66,14 @@ except Exception as e:
 @app.post("/generate-mobility", response_model=List[MobilityBlock])
 def generate_mobility(data: MobilityRequest):
     archetype = data.archetype
-    duration = data.duration  # e.g. 10, 20, 30 (in minutes)
+    duration_minutes = data.duration
+    duration_seconds = duration_minutes * 60
+    seconds_per_block = 130  # each block = 130s estimated
 
     if archetype != "Sentinel":
         raise HTTPException(status_code=400, detail="Only 'Sentinel' supported for now.")
 
-    # Estimate 1 block = 2 minutes (approx)
-    assumed_time_per_block = 2
-    max_blocks = duration // assumed_time_per_block
+    max_blocks = duration_seconds // seconds_per_block
 
     if max_blocks <= 0 or not MOBILITY_BLOCKS:
         raise HTTPException(status_code=404, detail="Not enough time or data for a session.")
