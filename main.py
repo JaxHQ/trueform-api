@@ -31,7 +31,7 @@ try:
             "isTimed": str(row.get("Is Timed", "TRUE")).lower() == "true",
             "intensityRange": str(row.get("Intensity Range", "Low")).strip(),
             "trainingPurpose": str(row.get("Training Purpose", "")).strip(),
-            "archetype": "Sentinel"
+            "archetypes": [a.strip() for a in str(row["Archretype Tags"]).split(",") if a.strip()],
         })
     print("✅ Loaded mobility blocks:", len(MOBILITY_BLOCKS))
 except Exception as e:
